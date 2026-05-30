@@ -14,6 +14,11 @@ The implementation is based on the full greenhouse planning conversation capture
 - A categorized bill of materials in [docs/MATERIALS_LIST.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/MATERIALS_LIST.md)
 - Seasonal and safety operating guidance in [docs/OPERATIONS_AND_SAFETY.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/OPERATIONS_AND_SAFETY.md)
 
+## GitHub automation
+
+- CI builds the ESP32-S3 firmware and bundles the docs snapshot through [build-release-bundle.yml](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/.github/workflows/build-release-bundle.yml)
+- GitHub Pages publishes a rendered documentation site from the markdown sources through [deploy-docs-site.yml](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/.github/workflows/deploy-docs-site.yml)
+- Repo agent behavior is now defined in the greenhouse-specific [copilot-instructions.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/.github/copilot-instructions.md)
 ## Implemented firmware features
 
 - Dual vent control with two servo outputs

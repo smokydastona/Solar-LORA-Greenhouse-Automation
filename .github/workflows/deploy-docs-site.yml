@@ -1,0 +1,96 @@
+name: Deploy Project Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - README.md
+      - docs/**
+      - .github/copilot-instructions.md
+      - .github/workflows/deploy-docs-site.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish docs site
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install markdown renderer
+        shell: bash
+        run: python -m pip install markdown
+
+      - name: Build static docs site from markdown
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          import markdown
+
+          repo = Path('.').resolve()
+          site = repo / 'site'
+          site.mkdir(exist_ok=True)
+
+          sources = [repo / 'README.md'] + sorted((repo / 'docs').glob('*.md'))
+          links = []
+
+          style = """
+          body { font-family: Arial, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #1f2a1f; }
+          nav { margin-bottom: 2rem; padding: 1rem; background: #eef5ea; border-radius: 10px; }
+          nav a { margin-right: 1rem; color: #1f5e2b; text-decoration: none; font-weight: 600; }
+          h1, h2, h3 { color: #214b2b; }
+          code { background: #f4f4f4; padding: 0.1rem 0.3rem; border-radius: 4px; }
+          pre code { display: block; padding: 1rem; overflow-x: auto; }
+          table { border-collapse: collapse; width: 100%; }
+          th, td { border: 1px solid #cfd8ce; padding: 0.5rem; text-align: left; }
+          """
+
+          for source in sources:
+              rel_name = 'index.html' if source.name == 'README.md' else source.stem.lower() + '.html'
+              links.append((source.stem if source.name != 'README.md' else 'Home', rel_name))
+
+          nav = '<nav>' + ''.join(f'<a href="{href}">{label}</a>' for label, href in links) + '</nav>'
+
+          for source in sources:
+              rel_name = 'index.html' if source.name == 'README.md' else source.stem.lower() + '.html'
+              html = markdown.markdown(source.read_text(encoding='utf-8'), extensions=['tables', 'fenced_code'])
+              output = site / rel_name
+              output.write_text(
+                  f'<!doctype html><html><head><meta charset="utf-8"><title>{source.stem}</title><style>{style}</style></head><body>{nav}{html}</body></html>',
+                  encoding='utf-8'
+              )
+          PY
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v5

@@ -1,44 +1,46 @@
 ---
-name: Debug report
-about: Submit an anonymized Bind Bandit debug report
-title: "[debug] "
-labels: [debug-report]
+name: Greenhouse bug report
+about: Report a firmware, wiring, automation, or documentation problem in the greenhouse project
+title: "[bug] "
+labels: [bug]
 assignees: []
 ---
 
-## Anonymized Debug Report
+## Summary
 
-Generated:
+What failed?
 
-App Version:
+## Current setup
 
-Connected:
+- Firmware commit or release:
+- Controller board:
+- Power mode in use: 5 V controller phase or 12 V upgrade phase
+- Sensors connected:
+- Vent hardware connected:
+- Fan hardware connected:
 
-Selected Port:
+## Expected behavior
 
-Active Slot:
+What should have happened?
 
-Bluetooth Status:
+## Actual behavior
 
-Last Latency:
+What actually happened?
 
-## Diagnostics
+## Reproduction steps
 
-Total Events:
+1.
+2.
+3.
 
-Recent EPS:
+## Logs or measurements
 
-Average Hold:
+- Serial log:
+- Display readings:
+- Voltage readings if relevant:
+- Photos or wiring notes if relevant:
 
-Calibration:
+## Safety notes
 
-## Included Artifacts
+Mention whether any wire, regulator, MOSFET, battery, or load got hot, smelled wrong, or behaved unsafely.
 
-Logs:
-
-Crash Logs:
-
-## Notes
-
-Attach the anonymized ZIP produced by Bind Bandit.
-Add any reproduction steps or symptoms that were visible before the failure.

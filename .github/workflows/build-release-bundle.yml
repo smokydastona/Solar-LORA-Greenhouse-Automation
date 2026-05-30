@@ -4,154 +4,49 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       create_release:
-        description: 'Create a GitHub Release with the built artifacts'
+        description: Create a GitHub release with the bundled firmware and docs artifacts
         required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'false'
-          - 'true'
+        default: false
+        type: boolean
 
 permissions:
   contents: write
-  id-token: write
-
-env:
-  REPO_VERSION_FILE: version.json
 
 jobs:
-  version-metadata:
-    name: Resolve build version
+  content-guard:
+    name: Guard against placeholders
     runs-on: ubuntu-latest
-    outputs:
-      source_version: ${{ steps.version.outputs.source_version }}
-      build_version: ${{ steps.version.outputs.build_version }}
-      file_version: ${{ steps.version.outputs.file_version }}
-      artifact_version: ${{ steps.version.outputs.artifact_version }}
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
 
-      - name: Resolve version outputs
-        id: version
-        shell: bash
-        run: |
-          python tools/versioning.py github-output --repo-version "$REPO_VERSION_FILE" --run-number "${{ github.run_number }}" --output "$GITHUB_OUTPUT"
-
-  lint:
-    name: Lint Python
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-      - run: pip install ruff
-      - run: ruff check helper-app/ tools/
-
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-      - name: Install system Qt/EGL dependencies
-        run: sudo apt-get install -y libegl1 libgl1 libglib2.0-0
-      - run: pip install -r helper-app/requirements-dev.txt
-      - run: python -m pytest --tb=short -v --cov --cov-report=term-missing
-        env:
-          QT_QPA_PLATFORM: offscreen
-
-  build-firmware:
-    name: Build ${{ matrix.artifact_name }}
-    runs-on: ubuntu-latest
-    needs: version-metadata
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - artifact_name: esp32-hid-host-uart
-            project_dir: firmware/esp32-hid-host-uart
-            target: esp32
-            bootloader_offset: "0x1000"
-          - artifact_name: esp32s3-usb-kbd
-            project_dir: firmware/esp32s3-usb-kbd
-            target: esp32s3
-            bootloader_offset: "0x0"
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v5
-
-      - name: Write firmware version
-        shell: bash
-        run: |
-          echo "${{ needs.version-metadata.outputs.source_version }}" > "${{ matrix.project_dir }}/version.txt"
-
-      - name: Build firmware
-        uses: espressif/esp-idf-ci-action@v1
-        with:
-          esp_idf_version: v5.2.2
-          target: ${{ matrix.target }}
-          path: ${{ matrix.project_dir }}
-
-      - name: Collect firmware outputs
+      - name: Fail on placeholder text in tracked project files
         shell: bash
         run: |
           set -euo pipefail
-          out="bundle/firmware/${{ matrix.artifact_name }}"
-          build_dir="${{ matrix.project_dir }}/build"
-          mkdir -p "$out"
+          found=0
+          while IFS= read -r file; do
+            if grep -nEi 'TODO|coming soon|stub implementation|placeholder' "$file"; then
+              echo "::error file=$file::Placeholder text found"
+              found=1
+            fi
+          done < <(git ls-files '*.md' '*.cpp' '*.h' '*.ini' '*.yml' '*.yaml')
 
-          cp "${{ matrix.project_dir }}/README.md" "$out/"
-          if [ -f "${{ matrix.project_dir }}/sdkconfig" ]; then
-            cp "${{ matrix.project_dir }}/sdkconfig" "$out/"
+          if [ "$found" -ne 0 ]; then
+            exit 1
           fi
 
-          cp "$build_dir/flasher_args.json" "$out/"
-          cp "$build_dir/bootloader/bootloader.bin" "$out/"
-          cp "$build_dir/partition_table/partition-table.bin" "$out/"
-          find "$build_dir" -maxdepth 1 -type f \( -name '*.bin' -o -name '*.elf' -o -name '*.map' \) -exec cp {} "$out/" \;
-          printf '%s\n' '${{ needs.version-metadata.outputs.build_version }}' > "$out/VERSION.txt"
-
-      - name: Create merged binary for web flasher
-        shell: bash
-        run: |
-          set -euo pipefail
-          pip install esptool
-          build_dir="${{ matrix.project_dir }}/build"
-          out="bundle/firmware/${{ matrix.artifact_name }}"
-
-          # Find the app binary (not bootloader, not partition-table)
-          APP_BIN=$(find "$build_dir" -maxdepth 1 -name '*.bin' ! -name 'bootloader.bin' ! -name 'partition-table.bin' | head -n1)
-
-          esptool.py --chip ${{ matrix.target }} merge_bin \
-            --flash_mode dio \
-            --flash_size 4MB \
-            -o "$out/${{ matrix.artifact_name }}-merged.bin" \
-            ${{ matrix.bootloader_offset }} "$build_dir/bootloader/bootloader.bin" \
-            0x8000 "$build_dir/partition_table/partition-table.bin" \
-            0x10000 "$APP_BIN"
-
-      - name: Upload firmware artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: firmware-${{ matrix.artifact_name }}
-          path: bundle/firmware/${{ matrix.artifact_name }}
-          if-no-files-found: error
-
-  build-helper-app:
-    name: Build helper app exe
-    runs-on: windows-latest
-    needs: version-metadata
+  build-firmware:
+    name: Build ESP32-S3 firmware
+    runs-on: ubuntu-latest
+    needs: content-guard
 
     steps:
       - name: Checkout repo
@@ -162,265 +57,160 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install helper app build dependencies
-        shell: pwsh
+      - name: Install PlatformIO and esptool
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r helper-app/requirements-build.txt
+          python -m pip install platformio esptool
 
-      - name: Generate UI bundle assets
-        shell: pwsh
+      - name: Build greenhouse controller firmware
+        shell: bash
+        run: pio run -e greenhouse_controller
+
+      - name: Package firmware outputs
+        shell: bash
         run: |
-          python tools/generate_ui_artifacts.py
+          set -euo pipefail
+          BUILD_DIR=".pio/build/greenhouse_controller"
+          OUT_DIR="bundle/firmware/greenhouse-controller"
+          mkdir -p "$OUT_DIR"
 
-      - name: Generate helper app version resource
-        shell: pwsh
-        run: |
-          python tools/versioning.py write-pyinstaller-version-file --repo-version version.json --run-number ${{ github.run_number }} --output helper-app/build/pyinstaller-version-info.txt
-          python tools/versioning.py write-app-version --repo-version version.json --output helper-app/joycon_helper/_version.py
+          cp README.md "$OUT_DIR/"
+          cp platformio.ini "$OUT_DIR/"
+          cp "$BUILD_DIR/firmware.bin" "$OUT_DIR/"
 
-      - name: Setup cosign (Sigstore)
-        uses: sigstore/cosign-installer@v3
+          if [ -f "$BUILD_DIR/bootloader.bin" ]; then
+            cp "$BUILD_DIR/bootloader.bin" "$OUT_DIR/"
+          fi
+          if [ -f "$BUILD_DIR/partitions.bin" ]; then
+            cp "$BUILD_DIR/partitions.bin" "$OUT_DIR/"
+          fi
+          if [ -f "$BUILD_DIR/firmware.elf" ]; then
+            cp "$BUILD_DIR/firmware.elf" "$OUT_DIR/"
+          fi
+          if [ -f "$BUILD_DIR/firmware.map" ]; then
+            cp "$BUILD_DIR/firmware.map" "$OUT_DIR/"
+          fi
 
-      - name: Build helper app exe
-        shell: pwsh
-        working-directory: helper-app
-        run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name BindBandit joycon_helper/__main__.py --paths . --distpath dist --workpath build --add-data "../.ui-bundle;.ui-bundle" --add-data "../.ui-bundle-dark;.ui-bundle-dark" --add-data "icon.ico;." --icon icon.ico --version-file build/pyinstaller-version-info.txt --hidden-import serial.tools.list_ports_windows
+          if [ -f "$BUILD_DIR/bootloader.bin" ] && [ -f "$BUILD_DIR/partitions.bin" ]; then
+            python -m esptool --chip esp32s3 merge_bin \
+              --output "$OUT_DIR/greenhouse-controller-merged.bin" \
+              --flash_mode dio \
+              --flash_size 4MB \
+              0x0 "$BUILD_DIR/bootloader.bin" \
+              0x8000 "$BUILD_DIR/partitions.bin" \
+              0x10000 "$BUILD_DIR/firmware.bin"
+          fi
 
-      - name: Sign published EXE (optional)
-        shell: pwsh
-        env:
-          # NOTE: Some editors/linters warn that `secrets.*` contexts are "invalid".
-          # This is expected locally because they cannot see your repo's configured secrets.
-          # In GitHub Actions, these resolve correctly when the secrets exist.
-          CODESIGN_PFX_BASE64: "${{ secrets['CODESIGN_PFX_BASE64'] }}"
-          CODESIGN_PFX_PASSWORD: "${{ secrets['CODESIGN_PFX_PASSWORD'] }}"
-          CODESIGN_TIMESTAMP_URL: "${{ secrets['CODESIGN_TIMESTAMP_URL'] }}"
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          if ([string]::IsNullOrWhiteSpace($env:CODESIGN_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:CODESIGN_PFX_PASSWORD)) {
-            Write-Host 'Code signing skipped (CODESIGN_PFX_BASE64 / CODESIGN_PFX_PASSWORD not set).'
-            exit 0
-          }
-
-          try {
-            $exe = Join-Path $PWD 'helper-app/dist/BindBandit.exe'
-            if (-not (Test-Path -LiteralPath $exe)) {
-              throw "Expected publish output not found: $exe"
-            }
-
-            $pfxPath = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
-            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CODESIGN_PFX_BASE64))
-
-            $timestamp = $env:CODESIGN_TIMESTAMP_URL
-            if ([string]::IsNullOrWhiteSpace($timestamp)) { $timestamp = 'http://timestamp.digicert.com' }
-
-            function Find-SignTool {
-              $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
-              if ($cmd) { return $cmd.Source }
-
-              $roots = @(
-                'C:\Program Files (x86)\Windows Kits\10\bin',
-                'C:\Program Files\Windows Kits\10\bin'
-              )
-
-              foreach ($root in $roots) {
-                if (-not (Test-Path -LiteralPath $root)) { continue }
-                $found = Get-ChildItem -LiteralPath $root -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
-                  Sort-Object FullName -Descending |
-                  Select-Object -First 1
-                if ($found) { return $found.FullName }
-              }
-
-              return $null
-            }
-
-            $signtool = Find-SignTool
-            if ([string]::IsNullOrWhiteSpace($signtool)) {
-              Write-Host 'Code signing skipped (signtool.exe not found on runner).'
-              exit 0
-            }
-
-            Write-Host "Using signtool: $signtool"
-
-            & $signtool sign /fd sha256 /a /f $pfxPath /p $env:CODESIGN_PFX_PASSWORD /tr $timestamp /td sha256 $exe
-            & $signtool verify /pa /v $exe
-          }
-          catch {
-            Write-Warning "Code signing failed (continuing without signing): $($_.Exception.Message)"
-            exit 0
-          }
-
-      - name: Cosign EXE (keyless, best-effort)
-        if: github.event_name != 'pull_request'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          $outDir = Join-Path $PWD 'helper-app/dist/cosign'
-          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-
-          $exe = Join-Path $PWD 'helper-app/dist/BindBandit.exe'
-          if (-not (Test-Path -LiteralPath $exe)) {
-            throw "Expected file not found: $exe"
-          }
-
-          try {
-            cosign sign-blob --yes --output-signature (Join-Path $outDir 'BindBandit.exe.sig') --output-certificate (Join-Path $outDir 'BindBandit.exe.crt') $exe
-          }
-          catch {
-            Write-Warning "cosign signing failed (continuing without signatures): $($_.Exception.Message)"
-          }
-
-      - name: Collect helper app outputs
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path bundle/helper-app | Out-Null
-          Copy-Item helper-app/README.md bundle/helper-app/README.md
-          Copy-Item helper-app/dist/BindBandit.exe bundle/helper-app/BindBandit.exe
-          $cosignDir = 'helper-app/dist/cosign'
-          if (Test-Path -LiteralPath $cosignDir) {
-            Copy-Item -LiteralPath $cosignDir -Destination bundle/helper-app/cosign -Recurse -Force
-          }
-          Set-Content -Path bundle/helper-app/VERSION.txt -Value "${{ needs.version-metadata.outputs.build_version }}"
-
-      - name: Upload helper app artifact
+      - name: Upload firmware artifact
         uses: actions/upload-artifact@v6
         with:
-          name: helper-app-exe
-          path: bundle/helper-app
+          name: greenhouse-controller-firmware
+          path: bundle/firmware/greenhouse-controller
+          if-no-files-found: error
+
+  bundle-docs:
+    name: Bundle docs set
+    runs-on: ubuntu-latest
+    needs: content-guard
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Bundle docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bundle/docs
+          cp README.md bundle/docs/
+          cp -R docs bundle/docs/docs
+          cp .github/copilot-instructions.md bundle/docs/
+          printf '%s\n' "${GITHUB_SHA}" > bundle/docs/COMMIT.txt
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: greenhouse-project-docs
+          path: bundle/docs
           if-no-files-found: error
 
   bundle-release:
-    name: Bundle firmware and helper app
+    name: Assemble release bundle
     runs-on: ubuntu-latest
     needs:
-      - version-metadata
       - build-firmware
-      - build-helper-app
+      - bundle-docs
 
     steps:
-      - name: Download ESP32 host firmware artifact
+      - name: Download firmware artifact
         uses: actions/download-artifact@v7
         with:
-          name: firmware-esp32-hid-host-uart
-          path: release-bundle/firmware/esp32-hid-host-uart
+          name: greenhouse-controller-firmware
+          path: release-bundle/firmware/greenhouse-controller
 
-      - name: Download ESP32-S3 USB firmware artifact
+      - name: Download docs artifact
         uses: actions/download-artifact@v7
         with:
-          name: firmware-esp32s3-usb-kbd
-          path: release-bundle/firmware/esp32s3-usb-kbd
-
-      - name: Download helper app artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: helper-app-exe
-          path: release-bundle/helper-app
+          name: greenhouse-project-docs
+          path: release-bundle/docs
 
       - name: Write bundle manifest
         shell: bash
         run: |
           cat > release-bundle/README.txt <<'EOF'
-          Bind Bandit build bundle
-
-          Version: ${{ needs.version-metadata.outputs.build_version }}
+          Solar LoRa Greenhouse Automation build bundle
 
           Contents:
-          - firmware/esp32-hid-host-uart: ESP32 Classic-BT host build outputs
-          - firmware/esp32s3-usb-kbd: ESP32-S3 USB keyboard build outputs
-          - helper-app/BindBandit.exe: packaged Windows helper app
+          - firmware/greenhouse-controller: PlatformIO ESP32-S3 firmware outputs
+          - docs: project documentation snapshot at this commit
 
-          The firmware folders include flasher_args.json and the generated binaries needed for ESP-IDF flashing.
+          The firmware directory contains the raw build outputs plus a merged flash image when bootloader and partitions are available.
           EOF
-          printf '%s\n' '${{ needs.version-metadata.outputs.build_version }}' > release-bundle/VERSION.txt
 
       - name: Upload combined release bundle
         uses: actions/upload-artifact@v6
         with:
-          name: bind-bandit-release-bundle-${{ needs.version-metadata.outputs.artifact_version }}
+          name: greenhouse-release-bundle-${{ github.run_number }}
           path: release-bundle
           if-no-files-found: error
 
   create-release:
-    name: Create GitHub Release
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      github.event.inputs.create_release == 'true'
+    name: Create GitHub release
+    if: github.event_name == 'workflow_dispatch' && inputs.create_release == true
     runs-on: ubuntu-latest
     needs:
-      - version-metadata
       - bundle-release
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Validate version increments
-        shell: bash
-        run: |
-          set -euo pipefail
-          NEW_VER="${{ needs.version-metadata.outputs.source_version }}"
-
-          # Fetch the latest release tag (may be empty if no releases exist yet).
-          LATEST_TAG=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || echo "")
-          if [ -z "$LATEST_TAG" ]; then
-            echo "No existing release found — first release will be v${NEW_VER}"
-            exit 0
-          fi
-
-          LATEST_VER="${LATEST_TAG#v}"
-          echo "Latest release: ${LATEST_VER} | New: ${NEW_VER}"
-
-          # Compare using sort -V (version sort). The newer version must sort last.
-          SORTED_LAST=$(printf '%s\n%s' "$LATEST_VER" "$NEW_VER" | sort -V | tail -n1)
-          if [ "$SORTED_LAST" = "$LATEST_VER" ] || [ "$NEW_VER" = "$LATEST_VER" ]; then
-            echo "::error::Version ${NEW_VER} does not increment over latest release ${LATEST_VER}"
-            exit 1
-          fi
-          echo "Version ${NEW_VER} > ${LATEST_VER} ✓"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Download release bundle
         uses: actions/download-artifact@v7
         with:
-          name: bind-bandit-release-bundle-${{ needs.version-metadata.outputs.artifact_version }}
+          name: greenhouse-release-bundle-${{ github.run_number }}
           path: release-bundle
 
-      - name: Create GitHub Release
+      - name: Create GitHub release
         shell: bash
-        run: |
-          set -euo pipefail
-          TAG="v${{ needs.version-metadata.outputs.source_version }}"
-          TITLE="Bind Bandit ${TAG}"
-          NOTES="Build version: ${{ needs.version-metadata.outputs.build_version }}"
-
-          # Publish merged binaries (bootloader + partition table + app) as the
-          # single firmware file per board.  The helper app extracts the app
-          # portion for OTA; initial flash and web flasher use them as-is.
-          ASSETS=()
-          ASSETS+=("release-bundle/helper-app/BindBandit.exe")
-
-          S3_MERGED="release-bundle/firmware/esp32s3-usb-kbd/esp32s3-usb-kbd-merged.bin"
-          ESP32_MERGED="release-bundle/firmware/esp32-hid-host-uart/esp32-hid-host-uart-merged.bin"
-          if [ -f "$S3_MERGED" ]; then
-            cp "$S3_MERGED" release-bundle/esp32s3-usb-kbd.bin
-            ASSETS+=("release-bundle/esp32s3-usb-kbd.bin")
-          fi
-          if [ -f "$ESP32_MERGED" ]; then
-            cp "$ESP32_MERGED" release-bundle/esp32-hid-host-uart.bin
-            ASSETS+=("release-bundle/esp32-hid-host-uart.bin")
-          fi
-
-          gh release create "${TAG}" \
-            --title "${TITLE}" \
-            --notes "${NOTES}" \
-            "${ASSETS[@]}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="build-${{ github.run_number }}"
+          TITLE="Greenhouse Controller Build #${{ github.run_number }}"
+
+          ASSETS=()
+          if [ -f release-bundle/firmware/greenhouse-controller/greenhouse-controller-merged.bin ]; then
+            ASSETS+=("release-bundle/firmware/greenhouse-controller/greenhouse-controller-merged.bin")
+          fi
+          if [ -f release-bundle/firmware/greenhouse-controller/firmware.bin ]; then
+            ASSETS+=("release-bundle/firmware/greenhouse-controller/firmware.bin")
+          fi
+
+          tar -czf greenhouse-docs-${{ github.run_number }}.tar.gz -C release-bundle/docs .
+          ASSETS+=("greenhouse-docs-${{ github.run_number }}.tar.gz")
+
+          gh release create "$TAG" \
+            --title "$TITLE" \
+            --notes "Automated greenhouse firmware and documentation bundle for commit $GITHUB_SHA" \
+            "${ASSETS[@]}"
 
