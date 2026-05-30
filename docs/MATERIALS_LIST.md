@@ -12,6 +12,7 @@
 | 5 V solar panels | Existing | Used for charging or direct fan duty |
 | USB power bank(s) | Existing | Used for 5 V buffered control power |
 | Handheld mini fans | Existing | Used for the LM2596 always-on mixing subsystem |
+| UV repair tape | Recommended to keep on hand | Immediate cover repair after tears or punctures |
 
 ## Immediate first-generation controller build
 
@@ -28,8 +29,20 @@
 | 4.7 kOhm resistor | 1 | DS18B20 pull-up |
 | Terminal block or distribution strip | 1 | 5 V and ground distribution |
 | Weather-resistant electronics box | 1 | Controller enclosure |
+| Cable glands or rubber grommets | As needed | Sealed enclosure cable entry |
+| Desiccant packs | Several | Moisture control inside electronics box |
 | USB breakout or sacrificial USB cables | As needed | Power-bank input and output taps |
 | Zip ties and adhesive mounts | As needed | Cable routing |
+
+## Structural and weather-hardening items
+
+| Item | Quantity | Purpose |
+| --- | --- | --- |
+| Spare anchors or tie-down hardware | As needed | Replacing failed anchoring hardware after storms |
+| Ratchet straps or equivalent hold-downs | As needed | Additional frame restraint in wind |
+| Bungee cords or paracord | As needed | Supplemental bracing or strain relief |
+| Cover clips or snap clamps | As needed | Securing greenhouse skin to frame members |
+| Foam weatherstrip or seal tape | As needed | Draft reduction on winter shell or access points |
 
 ## LM2596 always-on four-fan subsystem
 
@@ -40,6 +53,15 @@
 | 2 A fuse | 1 optional | Branch protection |
 | Small waterproof box | 1 | Protect buck converter and splices |
 
+## Irrigation and sensing expansion items
+
+| Item | Quantity | Purpose |
+| --- | --- | --- |
+| Gravity reservoir or elevated bucket | 1 optional | Simple non-powered irrigation buffer |
+| Drip line kit or micro-tubing | As needed | Targeted plant watering |
+| Shutoff valve or timer | 1 optional | Manual or scheduled irrigation control |
+| Capacitive soil-moisture sensors | As needed | Future irrigation and plant-zone sensing |
+
 ## Dome and winter-shell build
 
 | Item | Quantity | Purpose |
@@ -49,6 +71,8 @@
 | Latches or catches | To fit | Hold shell sealed in winter and parked in summer |
 | Weather seal tape | To fit | Improve edge sealing |
 | Black absorber panel material | 1 assembly | Solar heater surface inside the dome |
+| Bubble wrap or inner clear poly layer | To fit | Low-cost winter insulation strategy |
+| Frost cloth | To fit | Plant-level emergency freeze protection |
 
 ## Future 12 V upgrade
 

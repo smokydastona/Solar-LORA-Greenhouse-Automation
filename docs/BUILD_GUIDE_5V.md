@@ -4,6 +4,14 @@
 
 This is the build sequence for the complete first-generation controller system implemented in this repository.
 
+## Before you wire anything
+
+1. Check the greenhouse structure before installing electronics.
+2. Re-drive or tighten existing anchors if the frame has shifted.
+3. Re-secure any loose cover clips, zip ties, or vent hardware.
+4. Pick enclosure and cable routes that stay out of drip paths, runoff, and standing water.
+5. If the four-fan LM2596 branch is being installed at the same time, preset the LM2596 output with a multimeter before connecting the fans.
+
 ## Stage 1: bench build the controller
 
 1. Flash the ESP32-S3 board with the firmware in this repository.
@@ -52,6 +60,13 @@ This is the build sequence for the complete first-generation controller system i
 5. Use another power-bank output or a breakout branch for the 5 V load rail.
 6. Verify the bank both charges in sun and powers the controller at the same time.
 
+### Backbone checks that matter
+
+1. Verify the LM2596 output at the final target voltage before connecting the load side.
+2. Add an inline fuse on the fan branch or any custom branch that leaves the enclosure.
+3. Keep cable runs short and add strain relief where wires enter any box.
+4. Do not assume pass-through charging works on every power bank; test it in daylight before mounting everything permanently.
+
 ## Stage 7: install inside the greenhouse
 
 1. Mount the controller board and terminal hardware in a weather-resistant enclosure.
@@ -62,6 +77,9 @@ This is the build sequence for the complete first-generation controller system i
    - Light sensor near the roof but not blocked
    - Water sensor submerged in the thermal-mass container
 5. Keep the power bank serviceable so it can be replaced easily.
+6. Point cable-entry holes downward or sideways, not upward.
+7. Add desiccant to the enclosure before final closure.
+8. Leave enough slack to remove the power bank and ESP32-S3 for service without cutting wires.
 
 ## Stage 8: commission the system
 
@@ -72,6 +90,14 @@ This is the build sequence for the complete first-generation controller system i
 5. Cool the air sensor and verify the vents close again.
 6. Check that a log file appears on LittleFS.
 7. Let the system run for at least one day before changing thresholds.
+
+## First-week field checks
+
+1. Recheck every servo horn, linkage screw, and fan mount after the first windy day.
+2. Inspect the enclosure interior for condensation after the first cold night and after the first watering session.
+3. Verify the BME280 still reads realistically after a sunny afternoon; move the sensor shield if it is heat-soaking.
+4. Inspect the vent plastic and cover tie points for rubbing damage caused by repeated servo travel.
+5. Confirm the power bank is still gaining charge during sun instead of only discharging all day.
 
 ## Tuning order
 
