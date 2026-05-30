@@ -154,7 +154,7 @@ class GreenhouseController {
 
   void initSensors() {
     if (Settings::SYSTEM.enableBme280) {
-      bmeReady_ = bme_.begin(Settings::BME280_ADDRESS, &Wire);
+      bmeReady_ = bme_.begin(Settings::BME280_I2C_ADDRESS, &Wire);
     }
 
     if (Settings::SYSTEM.enableBh1750) {

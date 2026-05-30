@@ -101,7 +101,7 @@ constexpr SystemConfig SYSTEM{
 };
 
 constexpr uint8_t OLED_ADDRESS = 0x3C;
-constexpr uint8_t BME280_ADDRESS = 0x76;
+constexpr uint8_t BME280_I2C_ADDRESS = 0x76;
 constexpr uint8_t BH1750_ADDRESS = 0x23;
 constexpr uint8_t DISPLAY_WIDTH = 128;
 constexpr uint8_t DISPLAY_HEIGHT = 64;
