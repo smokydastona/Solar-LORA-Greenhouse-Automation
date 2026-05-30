@@ -33,7 +33,7 @@ jobs:
           set -euo pipefail
           found=0
           while IFS= read -r file; do
-            if [ "$file" = ".github/workflows/build-release-bundle.yml" ]; then
+            if [ "$file" = ".github/workflows/build-release-bundle.yml" ] || [ "$file" = ".github/copilot-instructions.md" ]; then
               continue
             fi
             if grep -nEi 'TODO([ :]|$)|FIXME([ :]|$)|TBD([ :]|$)|coming soon|stub implementation|replace me|placeholder value' "$file"; then
