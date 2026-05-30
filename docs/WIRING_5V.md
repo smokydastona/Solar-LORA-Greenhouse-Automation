@@ -44,6 +44,19 @@ all grounds
         -> load negative return
 ```
 
+## 5 V branch targets
+
+| Branch | Intended load | Fuse target | Wire target |
+| --- | --- | --- | --- |
+| Main controller-load feed | Controller rail, sensors, servos, MOSFET supply input | 3 A near source | 18 AWG |
+| Sensor and logic branch | BME280, BH1750, DS18B20, buttons, logic rails | 1 A | 22 AWG to 24 AWG |
+| Servo feed | Two MG90S-class vent servos on dedicated 5 V rail | 2 A to 3 A | 18 AWG |
+| Exhaust branch | One 5 V fan branch or equivalent load | 1 A to 2 A | 18 AWG |
+| Intake branch | One 5 V fan branch or equivalent load | 1 A to 2 A | 18 AWG |
+| Mini-fan LM2596 subsystem | Separate four-fan mixing branch | 2 A | 18 AWG |
+
+Measure the real final current draw before locking any fuse value into hardware.
+
 ## Sensor wiring
 
 ### BME280
@@ -97,6 +110,7 @@ For each controlled 5 V branch:
 - MOSFET source -> ground bus
 - MOSFET gate or IN -> configured GPIO
 - MOSFET module ground -> ground bus
+- Use one DAOKI-style 15 A 400 W MOSFET trigger module per independently switched branch.
 
 ## Four-fan LM2596 subsystem
 
@@ -129,3 +143,5 @@ LM2596 ground output
 - Do not leave any load branch without a common ground reference back to the controller.
 - Keep the controller box dry and the power bank replaceable.
 - Label the load branches physically once wired.
+- Use 18 AWG for any branch that actually carries actuator or fan current.
+- Treat 22 AWG to 24 AWG as signal and sensor wire only.

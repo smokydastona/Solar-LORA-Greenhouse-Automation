@@ -18,16 +18,18 @@
 
 | Item | Quantity | Purpose |
 | --- | --- | --- |
-| ESP32-S3 development board | 1 | Main greenhouse controller |
+| SX1262 LoRa V3 ESP32-S3 board | 1 | Main greenhouse controller with onboard OLED and future LoRa capability |
 | BME280 sensor | 1 | Air temperature and humidity |
 | BH1750 sensor | 1 | Ambient light sensing |
 | DS18B20 waterproof probe | 1 | Water temperature sensing |
-| OLED display | 1 if not integrated | Local status display |
-| Servo motors | 2 | Top and bottom vent motion |
-| Logic-level MOSFET modules | 3 to 5 | Exhaust, intake, grow light, heater, circulation outputs |
+| OLED display | Not needed if using the target LoRa V3 board | Local status display |
+| MG90S-class metal-gear micro servos | 2 | Top and bottom vent motion |
+| DAOKI-style 15 A 400 W MOSFET trigger modules | 3 to 5 | Exhaust, intake, grow light, heater, circulation outputs |
 | Momentary buttons | 3 | AUTO, FORCE OPEN, FORCE CLOSED |
 | 4.7 kOhm resistor | 1 | DS18B20 pull-up |
 | Terminal block or distribution strip | 1 | 5 V and ground distribution |
+| 18 AWG stranded wire | As needed | Main 5 V power and actuator runs |
+| 22 AWG to 24 AWG stranded wire | As needed | Sensor, button, and logic wiring |
 | Weather-resistant electronics box | 1 | Controller enclosure |
 | Cable glands or rubber grommets | As needed | Sealed enclosure cable entry |
 | Desiccant packs | Several | Moisture control inside electronics box |
