@@ -14,27 +14,42 @@
 | Handheld mini fans | Existing | Used for the LM2596 always-on mixing subsystem |
 | UV repair tape | Recommended to keep on hand | Immediate cover repair after tears or punctures |
 
+## Purchased electronics currently on hand
+
+| Item | Quantity | Status | Notes |
+| --- | --- | --- | --- |
+| SX1262 LoRa V3 ESP32 LX7 dual-core 0.96 in blue OLED Type-C Wi-Fi board, 863 MHz to 928 MHz | 1 | Bought | Treat this as the actual on-hand controller board; matches the repo target closely enough for the current ESP32-S3 controller plan |
+| SG90 9 g micro servo motors | 2 | Bought | Actual purchased vent actuators; lighter-duty than the MG90S-class metal-gear servos used as the torque target elsewhere in the docs |
+| DHT22 / AM2302 temperature and humidity sensor module | 1 | Bought | Actual purchased air temperature and humidity sensor; this differs from the active first-pass firmware sensor set |
+| DAOKI 15 A 400 W MOSFET trigger switch drive modules | Unknown exact count | Bought | Purchased switched-load power stage hardware for fan, light, heater, or circulation branches |
+
 ## Immediate first-generation controller build
 
-| Item | Quantity | Purpose |
-| --- | --- | --- |
-| SX1262 LoRa V3 ESP32-S3 board | 1 | Main greenhouse controller with onboard OLED and future LoRa capability |
-| BME280 sensor | 1 | Air temperature and humidity |
-| BH1750 sensor | 1 | Ambient light sensing |
-| DS18B20 waterproof probe | 1 | Water temperature sensing |
-| OLED display | Not needed if using the target LoRa V3 board | Local status display |
-| MG90S-class metal-gear micro servos | 2 | Top and bottom vent motion |
-| DAOKI-style 15 A 400 W MOSFET trigger modules | 3 to 5 | Exhaust, intake, grow light, heater, circulation outputs |
-| Momentary buttons | 3 | AUTO, FORCE OPEN, FORCE CLOSED |
-| 4.7 kOhm resistor | 1 | DS18B20 pull-up |
-| Terminal block or distribution strip | 1 | 5 V and ground distribution |
-| 18 AWG stranded wire | As needed | Main 5 V power and actuator runs |
-| 22 AWG to 24 AWG stranded wire | As needed | Sensor, button, and logic wiring |
-| Weather-resistant electronics box | 1 | Controller enclosure |
-| Cable glands or rubber grommets | As needed | Sealed enclosure cable entry |
-| Desiccant packs | Several | Moisture control inside electronics box |
-| USB breakout or sacrificial USB cables | As needed | Power-bank input and output taps |
-| Zip ties and adhesive mounts | As needed | Cable routing |
+| Item | Quantity | Purpose | Procurement status |
+| --- | --- | --- | --- |
+| SX1262 LoRa V3 ESP32-S3 board | 1 | Main greenhouse controller with onboard OLED and future LoRa capability | Bought, using the SX1262 LoRa V3 ESP32 LX7 dual-core listing above |
+| BME280 sensor | 1 | Air temperature and humidity | Not yet reflected as bought in this repo |
+| BH1750 sensor | 1 | Ambient light sensing | Not yet reflected as bought in this repo |
+| DS18B20 waterproof probe | 1 | Water temperature sensing | Not yet reflected as bought in this repo |
+| OLED display | Not needed if using the target LoRa V3 board | Local status display | Covered by the bought controller board |
+| MG90S-class metal-gear micro servos | 2 | Top and bottom vent motion | Current torque target; user currently bought 2 x SG90 instead |
+| DAOKI-style 15 A 400 W MOSFET trigger modules | 3 to 5 | Exhaust, intake, grow light, heater, circulation outputs | Bought, exact installed branch count still to be decided |
+| Momentary buttons | 3 | AUTO, FORCE OPEN, FORCE CLOSED | Not yet reflected as bought in this repo |
+| 4.7 kOhm resistor | 1 | DS18B20 pull-up | Not yet reflected as bought in this repo |
+| Terminal block or distribution strip | 1 | 5 V and ground distribution | Not yet reflected as bought in this repo |
+| 18 AWG stranded wire | As needed | Main 5 V power and actuator runs | Not yet reflected as bought in this repo |
+| 22 AWG to 24 AWG stranded wire | As needed | Sensor, button, and logic wiring | Not yet reflected as bought in this repo |
+| Weather-resistant electronics box | 1 | Controller enclosure | Not yet reflected as bought in this repo |
+| Cable glands or rubber grommets | As needed | Sealed enclosure cable entry | Not yet reflected as bought in this repo |
+| Desiccant packs | Several | Moisture control inside electronics box | Not yet reflected as bought in this repo |
+| USB breakout or sacrificial USB cables | As needed | Power-bank input and output taps | Not yet reflected as bought in this repo |
+| Zip ties and adhesive mounts | As needed | Cable routing | Not yet reflected as bought in this repo |
+
+## Current design versus purchased hardware note
+
+- The controller board and DAOKI MOSFET modules already align with the active first-generation design.
+- The bought DHT22 / AM2302 reflects what is physically on hand, but the current firmware and wiring docs still target BME280 plus BH1750 plus DS18B20 for the first implemented sensor stack.
+- The bought SG90 servos reflect what is physically on hand, but the current mechanical torque target in the active plan is still MG90S-class metal-gear servos or equivalent if the real vent linkage proves too heavy for SG90 units.
 
 ## Structural and weather-hardening items
 
