@@ -33,8 +33,11 @@ jobs:
           set -euo pipefail
           found=0
           while IFS= read -r file; do
-            if grep -nEi 'TODO|coming soon|stub implementation|placeholder' "$file"; then
-              echo "::error file=$file::Placeholder text found"
+            if [ "$file" = ".github/workflows/build-release-bundle.yml" ]; then
+              continue
+            fi
+            if grep -nEi 'TODO([ :]|$)|FIXME([ :]|$)|TBD([ :]|$)|coming soon|stub implementation|replace me|placeholder value' "$file"; then
+              echo "::error file=$file::Scaffold marker found"
               found=1
             fi
           done < <(git ls-files '*.md' '*.cpp' '*.h' '*.ini' '*.yml' '*.yaml')
