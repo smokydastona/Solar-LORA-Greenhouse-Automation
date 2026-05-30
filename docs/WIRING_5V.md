@@ -1,5 +1,7 @@
 # 5 V Wiring Reference
 
+Reference diagram: [5 V summer architecture](./diagrams/greenhouse-5v-summer-architecture.png)
+
 ## Controller pin map
 
 | Function | Pin |

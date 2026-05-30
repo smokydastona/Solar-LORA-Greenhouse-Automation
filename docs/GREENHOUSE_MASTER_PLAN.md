@@ -6,6 +6,11 @@ This document is the single source of truth for the greenhouse project. It conso
 
 Historical planning material from `docs/temp/` is reconciled in [docs/TEMP_PLAN_RECONCILIATION.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/TEMP_PLAN_RECONCILIATION.md). Use that note for context, but use this file and the active wiring/build docs as the current source of truth.
 
+Current reference diagrams:
+
+- [5 V summer architecture](./diagrams/greenhouse-5v-summer-architecture.png)
+- [Future 5 V plus 12 V winter architecture](./diagrams/greenhouse-5v-plus-12v-winter-architecture.png)
+
 ## Current physical greenhouse state
 
 - Base structure: small Miracle-Gro style greenhouse, approximately 4 ft x 2 ft x 6 ft

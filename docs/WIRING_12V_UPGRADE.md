@@ -1,5 +1,7 @@
 # 12 V Upgrade Wiring Plan
 
+Reference diagram: [Future 5 V plus 12 V winter architecture](./diagrams/greenhouse-5v-plus-12v-winter-architecture.png)
+
 ## Scope
 
 This document defines the future second-generation winter power system. It is intentionally separate from the current 5 V build.
