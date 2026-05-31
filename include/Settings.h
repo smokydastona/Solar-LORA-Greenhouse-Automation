@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "ControlLogic.h"
+
 namespace Settings {
 
 struct WifiConfig {
@@ -12,21 +14,7 @@ struct WifiConfig {
   bool enableOta;
 };
 
-struct ClimateConfig {
-  float ventOpenTempC;
-  float ventCloseTempC;
-  float fanOnTempC;
-  float fanOffTempC;
-  float humidityFanOnPct;
-  float humidityFanOffPct;
-  float heaterOnTempC;
-  float heaterOffTempC;
-  float waterHighTempC;
-  float waterLowTempC;
-  uint32_t growLightStartMinutes;
-  uint32_t growLightStopMinutes;
-  float growLightLuxThreshold;
-};
+using ClimateConfig = GreenhouseLogic::ClimateConfig;
 
 struct ServoConfig {
   int topClosedDegrees;
@@ -101,6 +89,12 @@ constexpr SystemConfig SYSTEM{
     true,
     true,
 };
+
+  constexpr GreenhouseLogic::SystemConfig CONTROL_SYSTEM{
+    SYSTEM.enableDefogger,
+    SYSTEM.enableGrowLight,
+    SYSTEM.enableCirculationFans,
+  };
 
 constexpr uint8_t OLED_ADDRESS = 0x3C;
 constexpr uint8_t BME280_I2C_ADDRESS = 0x76;

@@ -270,36 +270,14 @@ class GreenhouseController {
     const bool hasTime = currentLocalTime(&timeInfo);
     const uint32_t currentMinute = hasTime ? static_cast<uint32_t>(timeInfo.tm_hour * 60U + timeInfo.tm_min) : 0U;
 
-    const GreenhouseLogic::ClimateConfig climateConfig{
-        Settings::CLIMATE.ventOpenTempC,
-        Settings::CLIMATE.ventCloseTempC,
-        Settings::CLIMATE.fanOnTempC,
-        Settings::CLIMATE.fanOffTempC,
-        Settings::CLIMATE.humidityFanOnPct,
-        Settings::CLIMATE.humidityFanOffPct,
-        Settings::CLIMATE.heaterOnTempC,
-        Settings::CLIMATE.heaterOffTempC,
-        Settings::CLIMATE.waterHighTempC,
-        Settings::CLIMATE.waterLowTempC,
-        Settings::CLIMATE.growLightStartMinutes,
-        Settings::CLIMATE.growLightStopMinutes,
-        Settings::CLIMATE.growLightLuxThreshold,
-    };
-
-      const bool daylight = GreenhouseLogic::resolveDaylight(snapshot_, climateConfig, hasTime, currentMinute);
-
-    const GreenhouseLogic::SystemConfig systemConfig{
-        Settings::SYSTEM.enableDefogger,
-        Settings::SYSTEM.enableGrowLight,
-        Settings::SYSTEM.enableCirculationFans,
-    };
+    const bool daylight = GreenhouseLogic::resolveDaylight(snapshot_, Settings::CLIMATE, hasTime, currentMinute);
 
     actuators_ = GreenhouseLogic::evaluateActuators({
         snapshot_,
         actuators_,
         mode_,
-        climateConfig,
-        systemConfig,
+      Settings::CLIMATE,
+      Settings::CONTROL_SYSTEM,
         daylight,
         hasTime,
         currentMinute,
