@@ -30,6 +30,9 @@ struct SensorSnapshot {
   float humidityPct = 0.0F;
   float waterTempC = 0.0F;
   float lightLux = 0.0F;
+  uint32_t airAgeMs = UINT32_MAX;
+  uint32_t waterAgeMs = UINT32_MAX;
+  uint32_t lightAgeMs = UINT32_MAX;
   bool airAvailable = false;
   bool waterAvailable = false;
   bool lightAvailable = false;

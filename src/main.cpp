@@ -20,6 +20,7 @@
 #include <Wire.h>
 
 #include "ControlLogic.h"
+#include "ControllerRuntime.h"
 #include "LoRaLink.h"
 #include "PinMap.h"
 #include "Settings.h"
@@ -32,6 +33,9 @@ using GreenhouseLogic::CropProfile;
 using GreenhouseLogic::CropStatus;
 using GreenhouseLogic::GreenhouseMetrics;
 using GreenhouseLogic::SensorSnapshot;
+using GreenhouseRuntime::ConfigFault;
+using GreenhouseRuntime::ControllerState;
+using GreenhouseRuntime::PowerBudget;
 
 struct BatteryState {
   float voltageV = 0.0F;
@@ -48,6 +52,7 @@ enum class SafeModeReason : uint8_t {
   bootLoop,
   brownout,
   powerRecovery,
+  configFault,
   sensorFault,
   servoProtect,
 };
@@ -65,6 +70,16 @@ struct ServoProtectionState {
   uint32_t motionEndsAt = 0;
   uint32_t cooldownEndsAt = 0;
   uint8_t protectionTrips = 0;
+};
+
+struct SensorCacheState {
+  float lastAirTempC = 0.0F;
+  float lastHumidityPct = 0.0F;
+  float lastWaterTempC = 0.0F;
+  float lastLightLux = 0.0F;
+  uint32_t lastAirAt = 0;
+  uint32_t lastWaterAt = 0;
+  uint32_t lastLightAt = 0;
 };
 
 const char *resetReasonLabel(esp_reset_reason_t reason) {
@@ -122,6 +137,8 @@ const char *safeModeReasonLabel(SafeModeReason reason) {
       return "BROWNOUT";
     case SafeModeReason::powerRecovery:
       return "RECOVERY";
+    case SafeModeReason::configFault:
+      return "CONFIG";
     case SafeModeReason::sensorFault:
       return "SENSOR";
     case SafeModeReason::servoProtect:
@@ -185,6 +202,7 @@ class GreenhouseController {
     Wire.begin(PinMap::I2C_SDA, PinMap::I2C_SCL);
     initFilesystem();
     initPreferences();
+    applyConfigurationSafety();
     initReliability();
     initSensors();
     initDisplay();
@@ -198,7 +216,7 @@ class GreenhouseController {
 
     digitalWrite(PinMap::STATUS_LED, LOW);
     writeCsvHeaderIfNeeded();
-    snapshot_ = readSensors();
+    snapshot_ = readSensors(millis());
     evaluateSensorFaults(millis());
     battery_ = readBatteryState();
     metrics_ = GreenhouseLogic::evaluateMetrics(snapshot_, Settings::CROP.profile);
@@ -218,7 +236,7 @@ class GreenhouseController {
 
     if (now - lastControlAt_ >= Settings::LOGGING.controlIntervalMs) {
       lastControlAt_ = now;
-      snapshot_ = readSensors();
+      snapshot_ = readSensors(now);
       evaluateSensorFaults(now);
       battery_ = readBatteryState();
       metrics_ = GreenhouseLogic::evaluateMetrics(snapshot_, Settings::CROP.profile);
@@ -444,7 +462,8 @@ class GreenhouseController {
     loraLink_.begin(Settings::LORA.enableTransport,
                     Settings::LORA.nodeId,
                     Settings::LORA.maxRetries,
-                    Settings::LORA.retryBackoffMs);
+                    Settings::LORA.retryBackoffMs,
+                    bootCount_ ^ static_cast<uint32_t>(lastResetReason_));
   }
 
   void pollButtons() {
@@ -470,33 +489,90 @@ class GreenhouseController {
     renderDisplay(true);
   }
 
-  SensorSnapshot readSensors() {
+  SensorSnapshot readSensors(uint32_t now) {
     SensorSnapshot result;
+    bool airValidNow = false;
 
     if (bmeReady_) {
       result.airTempC = bme_.readTemperature();
       result.humidityPct = bme_.readHumidity();
-      result.airAvailable = validAirReading(result.airTempC, result.humidityPct);
+      airValidNow = validAirReading(result.airTempC, result.humidityPct);
     }
 
-    if (!result.airAvailable && dhtReady_) {
+    if (!airValidNow && dhtReady_) {
       result.airTempC = dht_.readTemperature();
       result.humidityPct = dht_.readHumidity();
-      result.airAvailable = validAirReading(result.airTempC, result.humidityPct);
+      airValidNow = validAirReading(result.airTempC, result.humidityPct);
+    }
+
+    if (airValidNow) {
+      sensorCache_.lastAirTempC = result.airTempC;
+      sensorCache_.lastHumidityPct = result.humidityPct;
+      sensorCache_.lastAirAt = now;
+    }
+    result.airAgeMs = GreenhouseRuntime::sampleAgeMs(now, sensorCache_.lastAirAt);
+    if (GreenhouseRuntime::sampleFresh(now, sensorCache_.lastAirAt, Settings::RELIABILITY.airDataMaxAgeMs)) {
+      result.airTempC = sensorCache_.lastAirTempC;
+      result.humidityPct = sensorCache_.lastHumidityPct;
+      result.airAvailable = true;
     }
 
     if (lightReady_) {
       result.lightLux = lightSensor_.readLightLevel();
-      result.lightAvailable = result.lightLux >= 0.0F && result.lightLux < 200000.0F;
+      if (result.lightLux >= 0.0F && result.lightLux < 200000.0F) {
+        sensorCache_.lastLightLux = result.lightLux;
+        sensorCache_.lastLightAt = now;
+      }
+    }
+    result.lightAgeMs = GreenhouseRuntime::sampleAgeMs(now, sensorCache_.lastLightAt);
+    if (GreenhouseRuntime::sampleFresh(now, sensorCache_.lastLightAt, Settings::RELIABILITY.lightDataMaxAgeMs)) {
+      result.lightLux = sensorCache_.lastLightLux;
+      result.lightAvailable = true;
     }
 
     if (waterReady_) {
       waterSensor_.requestTemperatures();
       result.waterTempC = waterSensor_.getTempCByIndex(0);
-      result.waterAvailable = result.waterTempC > -100.0F && result.waterTempC < 125.0F;
+      if (result.waterTempC > -100.0F && result.waterTempC < 125.0F) {
+        sensorCache_.lastWaterTempC = result.waterTempC;
+        sensorCache_.lastWaterAt = now;
+      }
+    }
+    result.waterAgeMs = GreenhouseRuntime::sampleAgeMs(now, sensorCache_.lastWaterAt);
+    if (GreenhouseRuntime::sampleFresh(now, sensorCache_.lastWaterAt, Settings::RELIABILITY.waterDataMaxAgeMs)) {
+      result.waterTempC = sensorCache_.lastWaterTempC;
+      result.waterAvailable = true;
     }
 
     return result;
+  }
+
+  void applyConfigurationSafety() {
+    GreenhouseRuntime::ValidationInput input{};
+    input.climate = Settings::CLIMATE;
+    input.freshness.airMaxAgeMs = Settings::RELIABILITY.airDataMaxAgeMs;
+    input.freshness.waterMaxAgeMs = Settings::RELIABILITY.waterDataMaxAgeMs;
+    input.freshness.lightMaxAgeMs = Settings::RELIABILITY.lightDataMaxAgeMs;
+    input.sampleIntervalMs = Settings::LOGGING.sampleIntervalMs;
+    input.displayIntervalMs = Settings::LOGGING.displayIntervalMs;
+    input.controlIntervalMs = Settings::LOGGING.controlIntervalMs;
+    input.otaPollIntervalMs = Settings::LOGGING.otaPollIntervalMs;
+    input.mqttPublishIntervalMs = Settings::MQTT.publishIntervalMs;
+    input.loraMaxRetries = Settings::LORA.maxRetries;
+    input.loraRetryBackoffMs = Settings::LORA.retryBackoffMs;
+    input.batteryLowVoltage = Settings::BATTERY.lowVoltage;
+    input.batteryCriticalVoltage = Settings::BATTERY.criticalVoltage;
+    input.batteryFullVoltage = Settings::BATTERY.fullVoltage;
+    input.batteryEmptyVoltage = Settings::BATTERY.emptyVoltage;
+    input.topClosedDegrees = Settings::SERVOS.topClosedDegrees;
+    input.topOpenDegrees = Settings::SERVOS.topOpenDegrees;
+    input.bottomClosedDegrees = Settings::SERVOS.bottomClosedDegrees;
+    input.bottomOpenDegrees = Settings::SERVOS.bottomOpenDegrees;
+
+    configFault_ = GreenhouseRuntime::validateConfiguration(input);
+    if (configFault_ != ConfigFault::none) {
+      enterSafeMode(SafeModeReason::configFault);
+    }
   }
 
   void evaluateSensorFaults(uint32_t now) {
@@ -527,9 +603,14 @@ class GreenhouseController {
 
   void computeOutputs() {
     if (safeMode_) {
+      controllerState_ = GreenhouseRuntime::resolveControllerState(true, battery_.available, battery_.low, battery_.critical, mode_);
+      powerBudget_ = GreenhouseRuntime::evaluatePowerBudget(battery_.available, battery_.low, battery_.critical);
       actuators_ = safeActuators();
       return;
     }
+
+    controllerState_ = GreenhouseRuntime::resolveControllerState(false, battery_.available, battery_.low, battery_.critical, mode_);
+    powerBudget_ = GreenhouseRuntime::evaluatePowerBudget(battery_.available, battery_.low, battery_.critical);
 
     struct tm timeInfo {};
     const bool hasTime = currentLocalTime(&timeInfo);
@@ -565,11 +646,17 @@ class GreenhouseController {
     }
 
     effectiveActuators_ = actuators_;
-    effectiveActuators_.defoggerOn = Settings::SYSTEM.enableDefogger && effectiveActuators_.defoggerOn;
-    effectiveActuators_.growLightOn = Settings::SYSTEM.enableGrowLight && effectiveActuators_.growLightOn;
-    effectiveActuators_.circulationFansOn = Settings::SYSTEM.enableCirculationFans && effectiveActuators_.circulationFansOn;
+    effectiveActuators_.exhaustFanOn = powerBudget_.allowVentFans && effectiveActuators_.exhaustFanOn;
+    effectiveActuators_.intakeFanOn = powerBudget_.allowVentFans && effectiveActuators_.intakeFanOn;
+    effectiveActuators_.defoggerOn = Settings::SYSTEM.enableDefogger && powerBudget_.allowDefogger && effectiveActuators_.defoggerOn;
+    effectiveActuators_.growLightOn = Settings::SYSTEM.enableGrowLight && powerBudget_.allowGrowLight && effectiveActuators_.growLightOn;
+    effectiveActuators_.circulationFansOn = Settings::SYSTEM.enableCirculationFans && powerBudget_.allowCirculation && effectiveActuators_.circulationFansOn;
 
-    requestServoTargets(effectiveActuators_.topVentOpen, effectiveActuators_.bottomVentOpen, false);
+    if (powerBudget_.allowServoMoves) {
+      requestServoTargets(effectiveActuators_.topVentOpen, effectiveActuators_.bottomVentOpen, false);
+    } else {
+      holdServosForInspection();
+    }
 
     digitalWrite(PinMap::FAN_EXHAUST, effectiveActuators_.exhaustFanOn ? HIGH : LOW);
     digitalWrite(PinMap::FAN_INTAKE, effectiveActuators_.intakeFanOn ? HIGH : LOW);
@@ -691,7 +778,7 @@ class GreenhouseController {
       display_.printf("Air: %s\n", airBuffer);
       display_.printf("MODE=resume");
     } else if (((millis() / Settings::LOGGING.displayIntervalMs) % 2U) == 0U) {
-      display_.printf("Mode: %s\n", modeLabel());
+      display_.printf("State:%s\n", GreenhouseRuntime::controllerStateLabel(controllerState_));
       display_.printf("Air:  %s\n", airBuffer);
       display_.printf("Water: %s\n", waterBuffer);
       display_.printf("Light: %s\n", lightBuffer);
@@ -739,9 +826,6 @@ class GreenhouseController {
   }
 
   const char *modeLabel() const {
-    if (safeMode_) {
-      return "SAFE";
-    }
     switch (mode_) {
       case ControlMode::automatic:
         return "AUTO";
@@ -764,7 +848,7 @@ class GreenhouseController {
     if (!file) {
       return;
     }
-    file.println("millis,mode,safe_mode,safe_reason,reset_reason,boot_failures,air_available,air_temp_c,humidity_pct,water_available,water_temp_c,light_available,light_lux,vpd_kpa,dew_point_c,frost_risk,crop_status,battery_available,battery_v,battery_pct,health_score,top_open,bottom_open,fan_exhaust,fan_intake,defogger,grow_light,circulation,lora_queue,lora_sent,lora_dropped");
+    file.println("millis,mode,controller_state,safe_mode,safe_reason,reset_reason,boot_failures,air_available,air_temp_c,humidity_pct,water_available,water_temp_c,light_available,light_lux,vpd_kpa,dew_point_c,frost_risk,crop_status,battery_available,battery_v,battery_pct,health_score,top_open,bottom_open,fan_exhaust,fan_intake,defogger,grow_light,circulation,lora_queue,lora_sent,lora_dropped");
     file.close();
   }
 
@@ -797,9 +881,10 @@ class GreenhouseController {
     if (!file) {
       return;
     }
-    file.printf("%lu,%s,%u,%s,%s,%u,%u,%.2f,%.2f,%u,%.2f,%u,%.2f,%.2f,%.2f,%u,%s,%u,%.2f,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%lu,%lu\n",
+    file.printf("%lu,%s,%s,%u,%s,%s,%u,%u,%.2f,%.2f,%u,%.2f,%u,%.2f,%.2f,%.2f,%u,%s,%u,%.2f,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%lu,%lu\n",
                 millis(),
                 modeLabel(),
+                GreenhouseRuntime::controllerStateLabel(controllerState_),
                 safeMode_,
                 safeModeReasonLabel(safeModeReason_),
                 resetReasonLabel(lastResetReason_),
@@ -1075,8 +1160,9 @@ class GreenhouseController {
     const CropProfile &profile = GreenhouseLogic::cropProfile(Settings::CROP.profile);
     snprintf(payload,
              payloadSize,
-             "{\"mode\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"calibrated\":%s,\"voltage_v\":%.2f,\"percent\":%d,\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"lora\":{\"queue_depth\":%u,\"sent\":%lu,\"dropped\":%lu},\"uptime_ms\":%lu}",
+             "{\"mode\":\"%s\",\"controller_state\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"age_ms\":%lu,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"calibrated\":%s,\"voltage_v\":%.2f,\"percent\":%d,\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"power_budget\":{\"servo_moves\":%s,\"vent_fans\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"lora\":{\"session_id\":%lu,\"queue_depth\":%u,\"sent\":%lu,\"dropped\":%lu,\"duplicate_inbound\":%lu,\"invalid_inbound\":%lu},\"uptime_ms\":%lu}",
              modeLabel(),
+             GreenhouseRuntime::controllerStateLabel(controllerState_),
              safeMode_ ? "true" : "false",
              safeModeReasonLabel(safeModeReason_),
              static_cast<unsigned>(bootFailures_),
@@ -1084,11 +1170,14 @@ class GreenhouseController {
              profile.name,
              cropStatusLabel(metrics_.cropStatus),
              snapshot_.airAvailable ? "true" : "false",
+             static_cast<unsigned long>(snapshot_.airAgeMs),
              snapshot_.airTempC,
              snapshot_.humidityPct,
              snapshot_.waterAvailable ? "true" : "false",
+             static_cast<unsigned long>(snapshot_.waterAgeMs),
              snapshot_.waterTempC,
              snapshot_.lightAvailable ? "true" : "false",
+             static_cast<unsigned long>(snapshot_.lightAgeMs),
              snapshot_.lightLux,
              metrics_.vpdAvailable ? metrics_.vaporPressureDeficitKPa : 0.0F,
              metrics_.dewPointAvailable ? metrics_.dewPointC : 0.0F,
@@ -1100,6 +1189,11 @@ class GreenhouseController {
              battery_.low ? "true" : "false",
              battery_.critical ? "true" : "false",
              computeHealthScore(),
+             powerBudget_.allowServoMoves ? "true" : "false",
+             powerBudget_.allowVentFans ? "true" : "false",
+             powerBudget_.allowDefogger ? "true" : "false",
+             powerBudget_.allowGrowLight ? "true" : "false",
+             powerBudget_.allowCirculation ? "true" : "false",
              effectiveActuators_.topVentOpen ? "true" : "false",
              effectiveActuators_.bottomVentOpen ? "true" : "false",
              effectiveActuators_.exhaustFanOn ? "true" : "false",
@@ -1112,9 +1206,12 @@ class GreenhouseController {
              otaReady_ ? "true" : "false",
              loraLink_.stats().backendReady ? "true" : "false",
              filesystemReady_ ? "true" : "false",
+             static_cast<unsigned long>(loraLink_.stats().sessionId),
              static_cast<unsigned>(loraLink_.stats().queueDepth),
              static_cast<unsigned long>(loraLink_.stats().sentFrames),
              static_cast<unsigned long>(loraLink_.stats().droppedFrames),
+             static_cast<unsigned long>(loraLink_.stats().duplicateInboundFrames),
+             static_cast<unsigned long>(loraLink_.stats().invalidInboundFrames),
              static_cast<unsigned long>(millis()));
   }
 
@@ -1166,11 +1263,14 @@ class GreenhouseController {
   Button forceCloseButton_{PinMap::BUTTON_FORCE_CLOSE};
 
   SensorSnapshot snapshot_;
+  SensorCacheState sensorCache_{};
   GreenhouseMetrics metrics_;
   BatteryState battery_;
   ActuatorState actuators_;
   ActuatorState effectiveActuators_;
   ControlMode mode_ = ControlMode::automatic;
+  ControllerState controllerState_ = ControllerState::automatic;
+  PowerBudget powerBudget_{};
 
   bool bmeReady_ = false;
   bool dhtReady_ = false;
@@ -1185,6 +1285,7 @@ class GreenhouseController {
   bool bootHealthy_ = false;
   bool rehomeAfterUnsafeReset_ = false;
   SafeModeReason safeModeReason_ = SafeModeReason::none;
+  ConfigFault configFault_ = ConfigFault::none;
   esp_reset_reason_t lastResetReason_ = ESP_RST_UNKNOWN;
   uint32_t bootCount_ = 0;
   uint8_t bootFailures_ = 0;

@@ -16,10 +16,12 @@ Use this file to prevent over-trusting the controller during deployment planning
 - Brownout-triggered safe mode and unfinished-servo recovery boot handling are implemented, and those inspection boots now hold the servos detached instead of re-driving them immediately.
 - An ESP32 task watchdog and an application-progress watchdog are implemented.
 - Repeated invalid air-sensor reads can now escalate into safe mode.
+- Sensor values now expire by age instead of remaining valid indefinitely after the last successful sample.
 - Servo movement is now time-limited and detached after a drive window, with repeated retrigger attempts able to force safe mode.
 - VPD, dew point, frost-risk evaluation, and crop-profile interpretation are implemented.
 - MQTT publishing and Home Assistant discovery are implemented when configured.
-- A compact LoRa telemetry payload, queue, and retry policy abstraction are implemented in code, even though the concrete radio backend is still disabled.
+- A compact LoRa telemetry payload, queue, retry policy, session identifier, CRC metadata, and inbound duplicate-rejection primitive are implemented in code, even though the concrete radio backend is still disabled.
+- Compile-time configuration is now validated at boot, and an invalid threshold or timing combination forces config-fault safe mode instead of running with a broken policy.
 - The controller supports the current owned-hardware DHT22 plus SG90 path and the fuller BME280 plus DS18B20 plus BH1750 path documented elsewhere in the repo.
 
 ## Not currently implemented as verified firmware features
@@ -53,6 +55,7 @@ Use this file to prevent over-trusting the controller during deployment planning
 - The future 12 V backbone is not currently integrated with the live 5 V controller hardware.
 - Battery percentage is only meaningful after the onboard Heltec battery-read path is verified against a real meter on the deployed board and the calibration-verified flag is set.
 - When neither a light sensor nor valid local time is available, day/night-dependent logic now defaults to night behavior instead of assuming daytime.
+- Low battery now sheds grow-light and circulation loads first, and critical battery suppresses all controller-backed switched loads and servo movement to protect the controller path.
 
 ## Intended safe-policy targets
 
@@ -60,7 +63,7 @@ These are design intentions documented in the repo. They should not be treated a
 
 - If the main air sensor is unavailable, default to a conservative day-open and night-closed vent policy, but only treat daytime vent-open behavior as available when the controller has either a valid light reading or valid local time.
 - If the water-temperature probe fails, continue greenhouse operation without thermal-mass logic.
-- If battery voltage is low, shed non-critical loads before sacrificing the controller.
+- If battery voltage is low, the implemented low-power policy now sheds non-critical loads before sacrificing the controller.
 - If jam detection is added later, verify it with real hardware sensing rather than inferred motion alone.
 
 ## Deployment boundary

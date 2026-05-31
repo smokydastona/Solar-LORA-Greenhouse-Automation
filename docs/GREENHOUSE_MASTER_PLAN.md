@@ -116,9 +116,13 @@ The first-generation automation system is split into two layers.
 - Safe-mode boot is now implemented for manual recovery entry and repeated unfinished boots.
 - Brownout-triggered safe mode, unfinished-servo recovery boot handling, and repeated air-sensor-fault escalation are now implemented.
 - ESP32 task-watchdog and application-progress watchdog recovery are now implemented.
+- The controller now resolves an explicit runtime state (`AUTO`, `OPEN`, `CLOSED`, `LOW_PWR`, `SAFE`) rather than relying only on implicit loop ordering.
+- Sensor data is now bounded by freshness windows so the controller stops trusting stale readings after the configured age limit.
 - VPD, dew point, frost-risk, and crop-profile interpretation are now implemented.
 - Optional MQTT publishing and Home Assistant discovery are now implemented for remote telemetry consumers.
 - Battery-voltage awareness is implemented against the Heltec board's onboard `VBAT_Read` and `ADC_Ctrl` path and still requires on-device calibration confirmation before the reading should be trusted operationally.
+- Low battery now sheds nonessential controller-backed loads first, and critical battery suppresses controller-backed switched loads and new servo moves to protect the controller path.
+- Startup now validates the configured thresholds, timings, servo angles, freshness windows, and LoRa retry policy and enters config-fault safe mode if that contract is broken.
 - Servo movement is now time-limited with cooldown-based protection, but direct current-sensed jam detection is still not implemented.
 
 See [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) for the explicit boundary between implemented behavior and documented design targets.
@@ -127,7 +131,7 @@ See [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) for the explicit bounda
 
 - If the main air sensor is unavailable, the implemented fallback now uses vent-open in daytime and vent-closed at night rather than continuing blind climate control.
 - If the water-temperature probe fails, thermal-mass logic should be ignored while the rest of the greenhouse continues operating.
-- If battery voltage monitoring is added later, non-critical loads should shed first: grow light, circulation, then fan branches before the controller itself is sacrificed.
+- If battery voltage monitoring is active, the implemented policy now sheds grow light and circulation first, then suppresses controller-backed switched loads and servo moves when the battery reaches the critical band.
 - Servo-jam handling requires either current sensing, positional feedback, or another verified detection method; until then, jam detection is not a claimed live feature.
 
 ## Sensor set

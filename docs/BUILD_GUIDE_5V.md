@@ -143,9 +143,11 @@ This is the build sequence for the complete first-generation controller system i
 9. Verify the reported battery voltage against a multimeter before trusting the percentage value.
 10. After that verification, set `Settings::BATTERY.calibrationVerified` to `true` so the display and telemetry stop flagging the reading as uncommissioned.
 11. If MQTT is enabled, verify that the retained state topic and Home Assistant discovery entities appear as expected.
-12. Simulate a repeated air-sensor failure and verify the controller enters safe mode instead of continuing blind climate control.
-13. After any forced reboot during servo travel, confirm the controller comes back in safe mode and requires inspection before normal operation resumes.
-14. If BH1750 is disabled, also verify that Wi-Fi time is available before relying on any day/night-dependent behavior; otherwise the controller now defaults those paths to night behavior.
+12. If battery voltage falls below the configured low threshold, confirm the controller sheds grow-light and circulation outputs before the system reaches the critical band.
+13. If battery voltage falls below the configured critical threshold, confirm the controller suppresses controller-backed switched loads and avoids new servo moves until battery state recovers.
+14. Simulate a repeated air-sensor failure and verify the controller enters safe mode instead of continuing blind climate control.
+15. After any forced reboot during servo travel, confirm the controller comes back in safe mode and requires inspection before normal operation resumes.
+16. If BH1750 is disabled, also verify that Wi-Fi time is available before relying on any day/night-dependent behavior; otherwise the controller now defaults those paths to night behavior.
 
 ## Safe-mode and recovery behavior
 
@@ -157,6 +159,7 @@ This is the build sequence for the complete first-generation controller system i
 6. Servo movement is intentionally time-limited and detached after a short drive window; repeated attempts during the cooldown window can also force safe mode.
 7. In safe mode, the controller suppresses climate outputs and keeps the greenhouse in a quiet, inspectable state; manual, boot-loop, brownout, and unfinished-servo recovery boots now keep the servos detached until the operator reboots out of safe mode.
 8. Press the mode button while in safe mode to clear the boot-failure counter and reboot after the underlying problem is fixed.
+9. If the configuration itself is invalid at boot, the controller now enters config-fault safe mode instead of running with contradictory thresholds or timing.
 
 ## First-week field checks
 

@@ -2,6 +2,7 @@
 
 #include "ControlLogic.h"
 #include "ControlLogicDefaults.h"
+#include "ControllerRuntime.h"
 #include "LoRaLink.h"
 
 namespace {
@@ -36,6 +37,9 @@ class FakeLoRaTransport : public GreenhouseLoRa::ILoRaTransport {
   bool readyState = true;
   bool sendResult = true;
   uint32_t sendCount = 0;
+  uint32_t lastSessionId = 0;
+  uint32_t lastSequence = 0;
+  uint32_t lastCrc32 = 0;
 
   bool begin() override {
     return beginResult;
@@ -45,8 +49,11 @@ class FakeLoRaTransport : public GreenhouseLoRa::ILoRaTransport {
     return readyState;
   }
 
-  bool send(const GreenhouseLoRa::TelemetryFrame &, GreenhouseLoRa::LinkStats &) override {
+  bool send(const GreenhouseLoRa::TelemetryFrame &frame, GreenhouseLoRa::LinkStats &) override {
     ++sendCount;
+    lastSessionId = frame.sessionId;
+    lastSequence = frame.sequence;
+    lastCrc32 = frame.crc32;
     return sendResult;
   }
 
@@ -370,6 +377,67 @@ void test_optional_outputs_stay_off_when_disabled_in_system_config() {
   TEST_ASSERT_FALSE(actual.circulationFansOn);
 }
 
+void test_controller_state_resolves_low_power_when_battery_is_low() {
+  const auto state = GreenhouseRuntime::resolveControllerState(false,
+                                                               true,
+                                                               true,
+                                                               false,
+                                                               GreenhouseLogic::ControlMode::automatic);
+
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseRuntime::ControllerState::lowPower),
+                          static_cast<uint8_t>(state));
+}
+
+void test_power_budget_sheds_noncritical_loads_at_low_battery() {
+  const auto budget = GreenhouseRuntime::evaluatePowerBudget(true, true, false);
+
+  TEST_ASSERT_TRUE(budget.allowServoMoves);
+  TEST_ASSERT_TRUE(budget.allowVentFans);
+  TEST_ASSERT_FALSE(budget.allowGrowLight);
+  TEST_ASSERT_FALSE(budget.allowCirculation);
+}
+
+void test_power_budget_sheds_all_controlled_loads_at_critical_battery() {
+  const auto budget = GreenhouseRuntime::evaluatePowerBudget(true, true, true);
+
+  TEST_ASSERT_FALSE(budget.allowServoMoves);
+  TEST_ASSERT_FALSE(budget.allowVentFans);
+  TEST_ASSERT_FALSE(budget.allowDefogger);
+  TEST_ASSERT_FALSE(budget.allowGrowLight);
+  TEST_ASSERT_FALSE(budget.allowCirculation);
+}
+
+void test_sensor_sample_freshness_expires_after_timeout() {
+  TEST_ASSERT_TRUE(GreenhouseRuntime::sampleFresh(1500U, 1000U, 600U));
+  TEST_ASSERT_FALSE(GreenhouseRuntime::sampleFresh(1701U, 1000U, 600U));
+  TEST_ASSERT_EQUAL_UINT32(250U, GreenhouseRuntime::sampleAgeMs(1250U, 1000U));
+}
+
+void test_runtime_validation_rejects_bad_threshold_configuration() {
+  GreenhouseRuntime::ValidationInput input{};
+  input.climate = climateConfig();
+  input.freshness = GreenhouseRuntime::SensorFreshnessPolicy{20000U, 900000U, 60000U};
+  input.sampleIntervalMs = 300000U;
+  input.displayIntervalMs = 2000U;
+  input.controlIntervalMs = 5000U;
+  input.otaPollIntervalMs = 10000U;
+  input.mqttPublishIntervalMs = 30000U;
+  input.loraMaxRetries = 3U;
+  input.loraRetryBackoffMs = 5000U;
+  input.batteryLowVoltage = 3.45F;
+  input.batteryCriticalVoltage = 3.30F;
+  input.batteryFullVoltage = 4.20F;
+  input.batteryEmptyVoltage = 3.20F;
+  input.topClosedDegrees = 28;
+  input.topOpenDegrees = 52;
+  input.bottomClosedDegrees = 30;
+  input.bottomOpenDegrees = 54;
+  input.climate.ventCloseTempC = input.climate.ventOpenTempC + 1.0F;
+
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseRuntime::ConfigFault::climateThresholds),
+                          static_cast<uint8_t>(GreenhouseRuntime::validateConfiguration(input)));
+}
+
 void test_metrics_compute_vpd_and_dew_point_for_valid_air_data() {
   GreenhouseLogic::SensorSnapshot snapshot{};
   snapshot.airAvailable = true;
@@ -422,13 +490,16 @@ void test_lettuce_profile_reports_stressed_conditions_when_too_hot() {
 void test_lora_link_service_sends_queued_frame_when_transport_is_ready() {
   FakeLoRaTransport transport;
   GreenhouseLoRa::LinkService link(transport);
-  link.begin(true, "node-a", 2, 1000U);
+  link.begin(true, "node-a", 2, 1000U, 42U);
 
   TEST_ASSERT_TRUE(link.queueTelemetry("temp=24.1", 10U));
 
   link.poll(10U);
 
   TEST_ASSERT_EQUAL_UINT32(1U, transport.sendCount);
+  TEST_ASSERT_EQUAL_UINT32(GreenhouseLoRa::deriveSessionId("node-a", 42U), transport.lastSessionId);
+  TEST_ASSERT_EQUAL_UINT32(1U, transport.lastSequence);
+  TEST_ASSERT_EQUAL_UINT32(GreenhouseLoRa::crc32("temp=24.1"), transport.lastCrc32);
   TEST_ASSERT_EQUAL_UINT32(1U, link.stats().sentFrames);
   TEST_ASSERT_EQUAL_UINT8(0U, link.stats().queueDepth);
 }
@@ -472,6 +543,23 @@ void test_compact_lora_telemetry_contains_core_fields() {
   TEST_ASSERT_NOT_EQUAL(nullptr, strstr(payload, "bp=76"));
 }
 
+void test_lora_link_service_rejects_invalid_or_duplicate_inbound_frames() {
+  FakeLoRaTransport transport;
+  GreenhouseLoRa::LinkService link(transport);
+  link.begin(true, "node-z", 2, 1000U, 77U);
+
+  const uint32_t sessionId = link.stats().sessionId;
+  const char *payload = "cmd=open";
+  const uint32_t checksum = GreenhouseLoRa::crc32(payload);
+
+  TEST_ASSERT_TRUE(link.validateInboundFrame(sessionId, 1U, checksum, payload));
+  TEST_ASSERT_FALSE(link.validateInboundFrame(sessionId, 1U, checksum, payload));
+  TEST_ASSERT_FALSE(link.validateInboundFrame(sessionId, 2U, checksum + 1U, payload));
+  TEST_ASSERT_EQUAL_UINT32(1U, link.stats().duplicateInboundFrames);
+  TEST_ASSERT_EQUAL_UINT32(1U, link.stats().invalidInboundFrames);
+  TEST_ASSERT_EQUAL_UINT32(1U, link.stats().lastAcceptedSequence);
+}
+
 }  // namespace
 
 extern "C" void setUp(void) {}
@@ -504,6 +592,11 @@ int main(int argc, char **argv) {
   RUN_TEST(test_grow_light_stays_off_outside_lighting_window_even_when_dark);
   RUN_TEST(test_grow_light_stays_off_without_time_even_when_dark);
   RUN_TEST(test_optional_outputs_stay_off_when_disabled_in_system_config);
+  RUN_TEST(test_controller_state_resolves_low_power_when_battery_is_low);
+  RUN_TEST(test_power_budget_sheds_noncritical_loads_at_low_battery);
+  RUN_TEST(test_power_budget_sheds_all_controlled_loads_at_critical_battery);
+  RUN_TEST(test_sensor_sample_freshness_expires_after_timeout);
+  RUN_TEST(test_runtime_validation_rejects_bad_threshold_configuration);
   RUN_TEST(test_metrics_compute_vpd_and_dew_point_for_valid_air_data);
   RUN_TEST(test_frost_risk_triggers_for_near_freezing_air_conditions);
   RUN_TEST(test_tomato_profile_reports_optimal_conditions);
@@ -511,5 +604,6 @@ int main(int argc, char **argv) {
   RUN_TEST(test_lora_link_service_sends_queued_frame_when_transport_is_ready);
   RUN_TEST(test_lora_link_service_retries_and_drops_after_max_retries);
   RUN_TEST(test_compact_lora_telemetry_contains_core_fields);
+  RUN_TEST(test_lora_link_service_rejects_invalid_or_duplicate_inbound_frames);
   return UNITY_END();
 }

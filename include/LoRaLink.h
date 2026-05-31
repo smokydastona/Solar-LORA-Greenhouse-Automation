@@ -9,11 +9,14 @@ namespace GreenhouseLoRa {
 constexpr size_t kNodeIdSize = 24;
 constexpr size_t kPayloadSize = 192;
 constexpr size_t kQueueCapacity = 8;
+constexpr size_t kRecentSequenceWindow = 8;
 
 struct TelemetryFrame {
   char nodeId[kNodeIdSize]{};
   char payload[kPayloadSize]{};
+  uint32_t sessionId = 0;
   uint32_t sequence = 0;
+  uint32_t crc32 = 0;
   uint32_t createdAtMs = 0;
   uint32_t lastAttemptAtMs = 0;
   uint8_t attempts = 0;
@@ -28,12 +31,47 @@ struct LinkStats {
   uint32_t sentFrames = 0;
   uint32_t droppedFrames = 0;
   uint32_t failedSendAttempts = 0;
+  uint32_t duplicateInboundFrames = 0;
+  uint32_t invalidInboundFrames = 0;
+  uint32_t lastAcceptedSequence = 0;
   uint32_t lastSequence = 0;
+  uint32_t sessionId = 0;
   uint8_t queueDepth = 0;
   int lastRssi = 0;
   float lastSnr = 0.0F;
   bool signalAvailable = false;
 };
+
+struct SequenceWindowEntry {
+  uint32_t sessionId = 0;
+  uint32_t sequence = 0;
+};
+
+inline uint32_t crc32Update(uint32_t crc, uint8_t byte) {
+  uint32_t next = crc ^ static_cast<uint32_t>(byte);
+  for (uint8_t bit = 0; bit < 8U; ++bit) {
+    const uint32_t mask = (next & 1U) != 0U ? 0xEDB88320UL : 0U;
+    next = (next >> 1U) ^ mask;
+  }
+  return next;
+}
+
+inline uint32_t crc32(const char *payload) {
+  uint32_t crc = 0xFFFFFFFFUL;
+  for (size_t index = 0; payload[index] != '\0'; ++index) {
+    crc = crc32Update(crc, static_cast<uint8_t>(payload[index]));
+  }
+  return crc ^ 0xFFFFFFFFUL;
+}
+
+inline uint32_t deriveSessionId(const char *nodeId, uint32_t seed) {
+  uint32_t hash = 2166136261UL ^ seed;
+  for (size_t index = 0; nodeId[index] != '\0'; ++index) {
+    hash ^= static_cast<uint8_t>(nodeId[index]);
+    hash *= 16777619UL;
+  }
+  return hash == 0U ? 1U : hash;
+}
 
 class ILoRaTransport {
  public:
@@ -110,13 +148,14 @@ class LinkService {
  public:
   explicit LinkService(ILoRaTransport &transport) : transport_(transport) {}
 
-  void begin(bool enabled, const char *nodeId, uint8_t maxRetries, uint32_t retryBackoffMs) {
+  void begin(bool enabled, const char *nodeId, uint8_t maxRetries, uint32_t retryBackoffMs, uint32_t sessionSeed = 0U) {
     stats_ = LinkStats{};
     stats_.enabled = enabled;
     maxRetries_ = maxRetries;
     retryBackoffMs_ = retryBackoffMs;
     strncpy(nodeId_, nodeId, sizeof(nodeId_) - 1U);
     nodeId_[sizeof(nodeId_) - 1U] = '\0';
+    stats_.sessionId = deriveSessionId(nodeId_, sessionSeed);
     if (!enabled) {
       return;
     }
@@ -133,7 +172,9 @@ class LinkService {
     TelemetryFrame frame{};
     strncpy(frame.nodeId, nodeId_, sizeof(frame.nodeId) - 1U);
     strncpy(frame.payload, payload, sizeof(frame.payload) - 1U);
+    frame.sessionId = stats_.sessionId;
     frame.sequence = ++sequence_;
+    frame.crc32 = crc32(frame.payload);
     frame.createdAtMs = now;
     frame.lastAttemptAtMs = 0;
     if (!queue_.enqueue(frame)) {
@@ -184,14 +225,50 @@ class LinkService {
     stats_.queueDepth = queue_.size();
   }
 
+  bool validateInboundFrame(uint32_t sessionId, uint32_t sequence, uint32_t payloadCrc32, const char *payload) {
+    if (!stats_.enabled || sessionId != stats_.sessionId || sequence == 0U || payload == nullptr) {
+      ++stats_.invalidInboundFrames;
+      return false;
+    }
+    if (crc32(payload) != payloadCrc32) {
+      ++stats_.invalidInboundFrames;
+      return false;
+    }
+    if (seenRecently(sessionId, sequence)) {
+      ++stats_.duplicateInboundFrames;
+      return false;
+    }
+
+    rememberSequence(sessionId, sequence);
+    stats_.lastAcceptedSequence = sequence;
+    return true;
+  }
+
   const LinkStats &stats() const {
     return stats_;
   }
 
  private:
+  bool seenRecently(uint32_t sessionId, uint32_t sequence) const {
+    for (const auto &entry : recentInbound_) {
+      if (entry.sessionId == sessionId && entry.sequence == sequence) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void rememberSequence(uint32_t sessionId, uint32_t sequence) {
+    recentInbound_[recentInboundIndex_].sessionId = sessionId;
+    recentInbound_[recentInboundIndex_].sequence = sequence;
+    recentInboundIndex_ = (recentInboundIndex_ + 1U) % kRecentSequenceWindow;
+  }
+
   ILoRaTransport &transport_;
   TelemetryQueue queue_;
   LinkStats stats_{};
+  SequenceWindowEntry recentInbound_[kRecentSequenceWindow]{};
+  uint8_t recentInboundIndex_ = 0;
   char nodeId_[kNodeIdSize]{};
   uint32_t sequence_ = 0;
   uint8_t maxRetries_ = 0;

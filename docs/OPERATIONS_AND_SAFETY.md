@@ -28,7 +28,7 @@ See [SAFETY_MODEL.md](./SAFETY_MODEL.md) for the quick reference showing which s
 - Prioritize vent travel and airflow.
 - Verify both vent fans shut down at night.
 - Watch for plant stress from direct fan blast and adjust fan angles rather than increasing raw speed.
-- Check bank state after stretches of overcast weather and reduce nonessential loads before the controller browns out.
+- Check bank state after stretches of overcast weather; the controller now sheds nonessential loads automatically, but the battery should still be treated as a maintenance signal rather than a license to ignore long cloud cover.
 - Inspect cover seams, vent flaps, and cable ties regularly because summer UV is hard on plastics.
 
 ### Winter
@@ -118,6 +118,7 @@ See [SAFETY_MODEL.md](./SAFETY_MODEL.md) for the quick reference showing which s
 - Reposition the active air sensor out of direct sun.
 - If using the current owned-hardware path, re-check the DHT22 wiring and verify the chosen GPIO is actually free on the exact board.
 - If using the fuller sensor stack, verify the DS18B20 pull-up resistor.
+- If telemetry shows a sensor `age_ms` value climbing past the configured freshness window, treat that reading as stale even if the last numeric value looked plausible.
 - If using the fuller sensor stack, check I2C wiring for the BME280 and BH1750.
 
 ### Fans never turn on in auto mode

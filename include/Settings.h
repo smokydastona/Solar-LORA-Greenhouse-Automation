@@ -44,6 +44,9 @@ struct ReliabilityConfig {
   bool airSensorFaultEntersSafeMode;
   uint8_t maxConsecutiveAirSensorFaults;
   uint32_t sensorFaultRecoveryDelayMs;
+  uint32_t airDataMaxAgeMs;
+  uint32_t waterDataMaxAgeMs;
+  uint32_t lightDataMaxAgeMs;
   uint32_t servoDriveWindowMs;
   uint32_t servoCooldownMs;
   uint8_t servoProtectionTripsBeforeSafeMode;
@@ -133,6 +136,9 @@ constexpr ReliabilityConfig RELIABILITY{
   true,
   3,
   30000UL,
+  20000UL,
+  900000UL,
+  60000UL,
   1200UL,
   4000UL,
   2,

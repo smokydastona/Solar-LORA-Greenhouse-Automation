@@ -12,7 +12,7 @@ It exists so dashboards, Home Assistant, and any future LoRa or cloud bridge can
 - State publishing: retained JSON payloads
 - Availability: retained `online` or `offline` topic
 - Home Assistant integration: MQTT discovery payloads published automatically on broker connection when enabled
-- LoRa status exposure: queue depth plus sent and dropped counters are included in the JSON state payload
+- LoRa status exposure: session id plus queue depth, sent, dropped, duplicate, and invalid counters are included in the JSON state payload
 
 ## Configuration surface
 
@@ -67,15 +67,18 @@ The current state topic publishes a retained JSON document shaped like this:
   },
   "air": {
     "available": true,
+    "age_ms": 0,
     "temp_c": 24.1,
     "humidity_pct": 70.0
   },
   "water": {
     "available": false,
+    "age_ms": 4294967295,
     "temp_c": 0.0
   },
   "light": {
     "available": true,
+    "age_ms": 0,
     "lux": 14820.0
   },
   "metrics": {
@@ -113,9 +116,12 @@ The current state topic publishes a retained JSON document shaped like this:
     "filesystem_ready": true
   },
   "lora": {
+    "session_id": 123456789,
     "queue_depth": 0,
     "sent": 0,
-    "dropped": 0
+    "dropped": 0,
+    "duplicate_inbound": 0,
+    "invalid_inbound": 0
   },
   "uptime_ms": 123456
 }
@@ -167,11 +173,22 @@ Interpret them like this:
 - `calibrated` remains `false` until the reading has been checked against a real meter and explicitly marked verified in settings
 - voltage and percent should not be treated as trusted operational battery truth until both `available` and `calibrated` are `true`
 
+### Sensor freshness
+
+- `air.age_ms`, `water.age_ms`, and `light.age_ms` report how long it has been since the last valid reading for each sensor surface
+- once a sensor exceeds its configured freshness window, `available` flips to `false` and the controller stops treating the cached value as live input
+
 ### `health`
 
 `score` is a simple controller-health heuristic based on sensor availability, filesystem readiness, safe mode, battery state, and expected connectivity.
 
 It is intended as an operator summary, not a formal reliability metric.
+
+### `power_budget`
+
+- `servo_moves`: whether the controller is currently allowed to issue new vent servo moves
+- `vent_fans`: whether controller-backed intake and exhaust fans are allowed to run
+- `defogger`, `grow_light`, `circulation`: whether those branches are currently allowed to energize under the active battery policy
 
 ## Home Assistant discovery entities
 
@@ -203,6 +220,8 @@ The firmware also builds a compact ASCII payload for the internal LoRa queue. It
 - health score
 - air temperature and humidity when available
 - battery voltage and percentage when available
+
+Each queued frame also carries a boot-scoped session id, a sequence number, and a CRC32 computed over the payload. The link service can reject duplicate or invalid inbound frames through its built-in validation window.
 
 The queue and retry policy are implemented in firmware, but the concrete SX1262 radio transport is still intentionally disabled until the on-air backend is validated.
 
