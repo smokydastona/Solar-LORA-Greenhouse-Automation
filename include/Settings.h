@@ -54,6 +54,7 @@ struct BatteryMonitorConfig {
   int analogPin;
   float dividerRatio;
   float calibrationOffsetVolts;
+  bool calibrationVerified;
   float lowVoltage;
   float criticalVoltage;
   float fullVoltage;
@@ -77,7 +78,6 @@ struct MqttConfig {
 struct LoRaConfig {
   bool enableTransport;
   const char *nodeId;
-  uint8_t queueDepth;
   uint8_t maxRetries;
   uint32_t retryBackoffMs;
 };
@@ -143,6 +143,7 @@ constexpr BatteryMonitorConfig BATTERY{
   1,
   4.9F * 1.045F,
   0.0F,
+  false,
   3.45F,
   3.30F,
   4.20F,
@@ -166,7 +167,6 @@ constexpr MqttConfig MQTT{
 constexpr LoRaConfig LORA{
   false,
   "mini-greenhouse-01",
-  8,
   3,
   5000UL,
 };
@@ -180,9 +180,9 @@ constexpr SystemConfig SYSTEM{
   true,
   false,
   false,
-    true,
-    true,
-    true,
+  false,
+  false,
+  false,
 };
 
 constexpr GreenhouseLogic::SystemConfig controlSystemConfig() {

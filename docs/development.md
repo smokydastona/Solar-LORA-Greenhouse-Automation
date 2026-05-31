@@ -10,7 +10,7 @@ For the greenhouse-specific engineering rules, use [DEVELOPER_GUIDE.md](./DEVELO
 - `include/ControlLogic.h`: pure greenhouse logic and greenhouse metrics
 - `include/Settings.h`: thresholds, feature toggles, and configuration
 - `include/PinMap.h`: hardware pin contract
-- `test/control_logic/test_control_logic.cpp`: host-side tests for the pure logic layer
+- `test/test_control_logic/test_control_logic.cpp`: host-side tests for the pure logic layer
 
 ## Local Commands
 

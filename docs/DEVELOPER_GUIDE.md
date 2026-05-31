@@ -10,7 +10,7 @@ It is not a generic ESP32 template. It reflects the current greenhouse controlle
 - [../include/ControlLogic.h](../include/ControlLogic.h) contains the shared greenhouse decision logic that can be tested on the host.
 - [../include/Settings.h](../include/Settings.h) contains user-tunable thresholds, feature toggles, and derived control-system configuration.
 - [../include/PinMap.h](../include/PinMap.h) is the hardware contract for the current ESP32-S3 target board.
-- [../test/control_logic/test_control_logic.cpp](../test/control_logic/test_control_logic.cpp) validates the pure decision layer.
+- [../test/test_control_logic/test_control_logic.cpp](../test/test_control_logic/test_control_logic.cpp) validates the pure decision layer.
 
 ## Design rules that matter
 

@@ -10,6 +10,7 @@ This is the build sequence for the complete first-generation controller system i
 
 - The default firmware configuration now supports the currently owned starter hardware: one DHT22 / AM2302 for air temperature and humidity and two SG90 vent servos.
 - In that starter path, BH1750 and DS18B20 stay optional and disabled until those sensors are actually added.
+- The optional defogger, grow-light, and circulation outputs also now ship disabled in [include/Settings.h](../include/Settings.h) until those branches are physically installed and intentionally commissioned.
 - The DHT22 data pin is now locked to [include/PinMap.h](../include/PinMap.h) `TEMP_AIR_DHT` on GPIO 16. On the Heltec-style SX1262 LoRa V3 pinout used by your bought board, GPIO 16 is broken out on Header J3 physical pin 17 and is not shown as one of the board's pre-wired OLED, LoRa, LED, or button signals.
 - The greenhouse pin map is now remapped around the board's fixed OLED, LoRa, LED, button, and USB-serial reservations so the firmware pin definitions match this board family instead of the old generic devkit assumptions.
 
@@ -51,7 +52,9 @@ This is the build sequence for the complete first-generation controller system i
 1. This Heltec-style SX1262 LoRa V3 board exposes an onboard battery-read path: `VBAT_Read` on GPIO 1 with `ADC_Ctrl` on GPIO 37.
 2. Do not connect any battery or 5 V rail directly to an ESP32 GPIO; use the board's own battery-read circuit for this target board.
 3. Verify the reported battery voltage against a multimeter on the real battery terminals and trim the calibration offset in [../include/Settings.h](../include/Settings.h) if needed.
-4. If you want MQTT or Home Assistant telemetry, configure the broker settings in [../include/Settings.h](../include/Settings.h) before commissioning.
+4. Leave `calibrationVerified` set to `false` in [../include/Settings.h](../include/Settings.h) until that meter check is complete; the display and telemetry now mark unverified battery readings with a trailing `?` and `battery.calibrated=false`.
+5. If you want MQTT or Home Assistant telemetry, configure the broker settings in [../include/Settings.h](../include/Settings.h) before commissioning.
+6. If you expect day/night-dependent fan, grow-light, or air-sensor-fallback behavior to track real daylight, commission either the BH1750 path or a reliable Wi-Fi time source before unattended use.
 
 ### Fuller upgrade path
 
@@ -88,6 +91,7 @@ This is the build sequence for the complete first-generation controller system i
 2. Use the controller GPIO pins only as logic signals.
 3. Feed load power from the 5 V bus through the MOSFET-controlled branch.
 4. Verify each output turns on and off by manually forcing conditions in firmware or by heating and cooling the current air sensor in use.
+5. Enable defogger, grow-light, and circulation support in [include/Settings.h](../include/Settings.h) only after their branches are actually wired and verified.
 
 ## Stage 5: add the manual override buttons
 
@@ -137,19 +141,21 @@ This is the build sequence for the complete first-generation controller system i
 7. Check that a log file appears on LittleFS and includes the `*_available` columns for each optional sensor.
 8. Let the system run for at least one day before changing thresholds.
 9. Verify the reported battery voltage against a multimeter before trusting the percentage value.
-10. If MQTT is enabled, verify that the retained state topic and Home Assistant discovery entities appear as expected.
-11. Simulate a repeated air-sensor failure and verify the controller enters safe mode instead of continuing blind climate control.
-12. After any forced reboot during servo travel, confirm the controller comes back in safe mode and requires inspection before normal operation resumes.
+10. After that verification, set `Settings::BATTERY.calibrationVerified` to `true` so the display and telemetry stop flagging the reading as uncommissioned.
+11. If MQTT is enabled, verify that the retained state topic and Home Assistant discovery entities appear as expected.
+12. Simulate a repeated air-sensor failure and verify the controller enters safe mode instead of continuing blind climate control.
+13. After any forced reboot during servo travel, confirm the controller comes back in safe mode and requires inspection before normal operation resumes.
+14. If BH1750 is disabled, also verify that Wi-Fi time is available before relying on any day/night-dependent behavior; otherwise the controller now defaults those paths to night behavior.
 
 ## Safe-mode and recovery behavior
 
 1. The firmware now records reset reason and tracks repeated failed boots in `Preferences`.
 2. Holding both override buttons during boot enters safe mode immediately.
 3. Repeated unfinished boots also force safe mode.
-4. Brownout resets and unfinished-servo recovery boots also enter safe mode so vent travel can be rechecked before unattended operation resumes.
+4. Brownout resets and unfinished-servo recovery boots also enter safe mode so vent travel can be rechecked before unattended operation resumes, and those recovery boots now hold the servos detached for inspection instead of re-driving them immediately.
 5. Repeated invalid air-sensor reads can escalate to safe mode, and that fault path opens both vents as the conservative inspection posture.
 6. Servo movement is intentionally time-limited and detached after a short drive window; repeated attempts during the cooldown window can also force safe mode.
-7. In safe mode, the controller suppresses climate outputs and keeps the greenhouse in a quiet, inspectable state.
+7. In safe mode, the controller suppresses climate outputs and keeps the greenhouse in a quiet, inspectable state; manual, boot-loop, brownout, and unfinished-servo recovery boots now keep the servos detached until the operator reboots out of safe mode.
 8. Press the mode button while in safe mode to clear the boot-failure counter and reboot after the underlying problem is fixed.
 
 ## First-week field checks

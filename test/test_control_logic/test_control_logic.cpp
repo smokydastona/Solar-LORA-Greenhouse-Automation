@@ -90,11 +90,11 @@ void test_daylight_resolver_falls_back_to_schedule_when_light_sensor_is_unavaila
   TEST_ASSERT_FALSE(GreenhouseLogic::resolveDaylight(ctx.snapshot, ctx.climate, true, ctx.currentMinute));
 }
 
-void test_daylight_resolver_defaults_to_day_when_no_light_sensor_or_time_is_available() {
+void test_daylight_resolver_defaults_to_night_when_no_light_sensor_or_time_is_available() {
   auto ctx = baseContext();
   ctx.snapshot.lightAvailable = false;
 
-  TEST_ASSERT_TRUE(GreenhouseLogic::resolveDaylight(ctx.snapshot, ctx.climate, false, 0U));
+  TEST_ASSERT_FALSE(GreenhouseLogic::resolveDaylight(ctx.snapshot, ctx.climate, false, 0U));
 }
 
 void test_force_open_turns_on_venting_and_disables_heat_and_light() {
@@ -354,6 +354,22 @@ void test_grow_light_stays_off_without_time_even_when_dark() {
   TEST_ASSERT_FALSE(actual.growLightOn);
 }
 
+void test_optional_outputs_stay_off_when_disabled_in_system_config() {
+  auto ctx = baseContext();
+  ctx.daylight = false;
+  ctx.system = systemConfig(false, false, false);
+  ctx.snapshot.airTempC = 4.0F;
+  ctx.snapshot.humidityPct = 90.0F;
+  ctx.snapshot.lightAvailable = true;
+  ctx.snapshot.lightLux = 1000.0F;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_FALSE(actual.defoggerOn);
+  TEST_ASSERT_FALSE(actual.growLightOn);
+  TEST_ASSERT_FALSE(actual.circulationFansOn);
+}
+
 void test_metrics_compute_vpd_and_dew_point_for_valid_air_data() {
   GreenhouseLogic::SensorSnapshot snapshot{};
   snapshot.airAvailable = true;
@@ -458,12 +474,16 @@ void test_compact_lora_telemetry_contains_core_fields() {
 
 }  // namespace
 
+extern "C" void setUp(void) {}
+
+extern "C" void tearDown(void) {}
+
 int main(int argc, char **argv) {
   UNITY_BEGIN();
   RUN_TEST(test_mode_cycle_wraps_in_expected_order);
   RUN_TEST(test_daylight_resolver_uses_light_sensor_when_available);
   RUN_TEST(test_daylight_resolver_falls_back_to_schedule_when_light_sensor_is_unavailable);
-  RUN_TEST(test_daylight_resolver_defaults_to_day_when_no_light_sensor_or_time_is_available);
+  RUN_TEST(test_daylight_resolver_defaults_to_night_when_no_light_sensor_or_time_is_available);
   RUN_TEST(test_force_open_turns_on_venting_and_disables_heat_and_light);
   RUN_TEST(test_force_closed_turns_everything_off);
   RUN_TEST(test_vents_stay_open_between_open_and_close_thresholds_when_previously_open);
@@ -483,6 +503,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_grow_light_stays_off_at_exact_lux_threshold);
   RUN_TEST(test_grow_light_stays_off_outside_lighting_window_even_when_dark);
   RUN_TEST(test_grow_light_stays_off_without_time_even_when_dark);
+  RUN_TEST(test_optional_outputs_stay_off_when_disabled_in_system_config);
   RUN_TEST(test_metrics_compute_vpd_and_dew_point_for_valid_air_data);
   RUN_TEST(test_frost_risk_triggers_for_near_freezing_air_conditions);
   RUN_TEST(test_tomato_profile_reports_optimal_conditions);

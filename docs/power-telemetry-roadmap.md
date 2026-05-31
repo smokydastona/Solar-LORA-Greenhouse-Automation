@@ -13,6 +13,7 @@ Implemented now:
 
 - onboard battery voltage sensing through the Heltec board battery-read path
 - low and critical battery thresholds in firmware
+- explicit telemetry state showing whether the onboard battery reading has been meter-verified on the deployed board
 - battery state exposure in the MQTT payload when configured
 
 Not yet implemented:

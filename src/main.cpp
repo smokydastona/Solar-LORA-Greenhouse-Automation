@@ -37,6 +37,7 @@ struct BatteryState {
   float voltageV = 0.0F;
   int percent = 0;
   bool available = false;
+  bool calibrated = false;
   bool low = false;
   bool critical = false;
 };
@@ -187,7 +188,10 @@ class GreenhouseController {
     initReliability();
     initSensors();
     initDisplay();
-    initServos();
+    primeServoTargets();
+    if (!holdsServosForInspection()) {
+      initServos();
+    }
     initWifi();
     initMqtt();
     initLoRa();
@@ -319,14 +323,17 @@ class GreenhouseController {
     }
   }
 
+  void primeServoTargets() {
+    servoProtection_.topTargetDegrees = Settings::SERVOS.topClosedDegrees;
+    servoProtection_.bottomTargetDegrees = Settings::SERVOS.bottomClosedDegrees;
+  }
+
   void initServos() {
     topServo_.setPeriodHertz(50);
     bottomServo_.setPeriodHertz(50);
     topServo_.attach(PinMap::SERVO_TOP_VENT, 500, 2400);
     bottomServo_.attach(PinMap::SERVO_BOTTOM_VENT, 500, 2400);
 
-    servoProtection_.topTargetDegrees = Settings::SERVOS.topClosedDegrees;
-    servoProtection_.bottomTargetDegrees = Settings::SERVOS.bottomClosedDegrees;
     topServo_.write(servoProtection_.topTargetDegrees);
     bottomServo_.write(servoProtection_.bottomTargetDegrees);
     servoProtection_.motionActive = true;
@@ -447,7 +454,7 @@ class GreenhouseController {
       return;
     }
     if (modeButton_.pressed()) {
-      cycleMode();
+      setMode(ControlMode::automatic);
     }
     if (forceOpenButton_.pressed()) {
       setMode(ControlMode::forceOpen);
@@ -455,10 +462,6 @@ class GreenhouseController {
     if (forceCloseButton_.pressed()) {
       setMode(ControlMode::forceClosed);
     }
-  }
-
-  void cycleMode() {
-    setMode(GreenhouseLogic::nextMode(mode_));
   }
 
   void setMode(ControlMode mode) {
@@ -548,7 +551,11 @@ class GreenhouseController {
   void applyActuatorState() {
     if (safeMode_) {
       effectiveActuators_ = safeActuators();
-      requestServoTargets(effectiveActuators_.topVentOpen, effectiveActuators_.bottomVentOpen, true);
+      if (safeModeAllowsServoMovement()) {
+        requestServoTargets(effectiveActuators_.topVentOpen, effectiveActuators_.bottomVentOpen, true);
+      } else {
+        holdServosForInspection();
+      }
       digitalWrite(PinMap::FAN_EXHAUST, LOW);
       digitalWrite(PinMap::FAN_INTAKE, LOW);
       digitalWrite(PinMap::HEATER_DEFOGGER, LOW);
@@ -653,7 +660,12 @@ class GreenhouseController {
     formatMeasurement(vpdBuffer, sizeof(vpdBuffer), metrics_.vpdAvailable, metrics_.vaporPressureDeficitKPa, 2, "kPa");
     formatMeasurement(dewBuffer, sizeof(dewBuffer), metrics_.dewPointAvailable, metrics_.dewPointC, 1, "C");
     if (battery_.available) {
-      snprintf(batteryBuffer, sizeof(batteryBuffer), "%d%% %.2fV", battery_.percent, static_cast<double>(battery_.voltageV));
+      snprintf(batteryBuffer,
+               sizeof(batteryBuffer),
+               "%d%% %.2fV%s",
+               battery_.percent,
+               static_cast<double>(battery_.voltageV),
+               battery_.calibrated ? "" : "?");
     } else {
       snprintf(batteryBuffer, sizeof(batteryBuffer), "N/A");
     }
@@ -824,6 +836,27 @@ class GreenhouseController {
     return digitalRead(PinMap::BUTTON_FORCE_OPEN) == LOW && digitalRead(PinMap::BUTTON_FORCE_CLOSE) == LOW;
   }
 
+  bool safeModeAllowsServoMovement() const {
+    return safeModeReason_ == SafeModeReason::sensorFault;
+  }
+
+  bool holdsServosForInspection() const {
+    return safeMode_ && !safeModeAllowsServoMovement();
+  }
+
+  void holdServosForInspection() {
+    if (topServo_.attached()) {
+      topServo_.detach();
+    }
+    if (bottomServo_.attached()) {
+      bottomServo_.detach();
+    }
+    servoProtection_.motionActive = false;
+    servoProtection_.motionEndsAt = 0;
+    servoProtection_.cooldownEndsAt = 0;
+    preferences_.putBool("servo_pending", false);
+  }
+
   ActuatorState safeActuators() const {
     ActuatorState actuators{};
     if (safeModeReason_ == SafeModeReason::sensorFault) {
@@ -893,6 +926,8 @@ class GreenhouseController {
     if (!state.available) {
       return state;
     }
+
+    state.calibrated = Settings::BATTERY.calibrationVerified;
 
     const float percent = ((state.voltageV - Settings::BATTERY.emptyVoltage) /
                            (Settings::BATTERY.fullVoltage - Settings::BATTERY.emptyVoltage)) * 100.0F;
@@ -987,10 +1022,15 @@ class GreenhouseController {
     publishHomeAssistantSensorDiscovery("sensor", "humidity", "Humidity", "{{ value_json.air.humidity_pct }}", "humidity", "measurement", "%");
     publishHomeAssistantSensorDiscovery("sensor", "vpd", "VPD", "{{ value_json.metrics.vpd_kpa }}", "", "measurement", "kPa");
     publishHomeAssistantSensorDiscovery("sensor", "dew_point", "Dew Point", "{{ value_json.metrics.dew_point_c }}", "temperature", "measurement", "°C");
-    publishHomeAssistantSensorDiscovery("sensor", "battery_pct", "Battery", "{{ value_json.battery.percent }}", "battery", "measurement", "%");
+    publishHomeAssistantSensorDiscovery("sensor", "battery_percentage", "Battery Percentage", "{{ value_json.battery.percent }}", "battery", "measurement", "%");
     publishHomeAssistantSensorDiscovery("sensor", "health_score", "Health Score", "{{ value_json.health.score }}", "", "measurement", "%");
     publishHomeAssistantSensorDiscovery("sensor", "crop_status", "Crop Status", "{{ value_json.crop.status }}", "", "", "");
     publishHomeAssistantSensorDiscovery("binary_sensor", "frost_risk", "Frost Risk", "{{ value_json.metrics.frost_risk }}", "cold", "", "");
+    publishHomeAssistantSensorDiscovery("binary_sensor", "fan_exhaust", "Fan Exhaust", "{{ value_json.actuators.fan_exhaust }}", "", "", "");
+    publishHomeAssistantSensorDiscovery("binary_sensor", "fan_intake", "Fan Intake", "{{ value_json.actuators.fan_intake }}", "", "", "");
+    publishHomeAssistantSensorDiscovery("binary_sensor", "defogger", "Defogger", "{{ value_json.actuators.defogger }}", "heat", "", "");
+    publishHomeAssistantSensorDiscovery("binary_sensor", "grow_light", "Grow Light", "{{ value_json.actuators.grow_light }}", "light", "", "");
+    publishHomeAssistantSensorDiscovery("binary_sensor", "circulation", "Circulation", "{{ value_json.actuators.circulation }}", "running", "", "");
     discoveryPublished_ = true;
   }
 
@@ -1035,7 +1075,7 @@ class GreenhouseController {
     const CropProfile &profile = GreenhouseLogic::cropProfile(Settings::CROP.profile);
     snprintf(payload,
              payloadSize,
-             "{\"mode\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"voltage_v\":%.2f,\"percent\":%d,\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"lora\":{\"queue_depth\":%u,\"sent\":%lu,\"dropped\":%lu},\"uptime_ms\":%lu}",
+             "{\"mode\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"calibrated\":%s,\"voltage_v\":%.2f,\"percent\":%d,\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"lora\":{\"queue_depth\":%u,\"sent\":%lu,\"dropped\":%lu},\"uptime_ms\":%lu}",
              modeLabel(),
              safeMode_ ? "true" : "false",
              safeModeReasonLabel(safeModeReason_),
@@ -1054,6 +1094,7 @@ class GreenhouseController {
              metrics_.dewPointAvailable ? metrics_.dewPointC : 0.0F,
              metrics_.frostRisk ? "true" : "false",
              battery_.available ? "true" : "false",
+             battery_.calibrated ? "true" : "false",
              battery_.voltageV,
              battery_.percent,
              battery_.low ? "true" : "false",

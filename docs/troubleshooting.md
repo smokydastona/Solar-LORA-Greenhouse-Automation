@@ -118,8 +118,9 @@ Checks:
 ### Checks
 
 1. Confirm whether the display shows valid air values or `N/A`.
-2. If air data is unavailable, remember the current fallback is day-open and night-closed.
-3. Review threshold values in [../include/Settings.h](../include/Settings.h).
+2. If air data is unavailable, remember the fallback is day-open and night-closed only when the controller can still resolve day or night from either the light sensor or valid local time.
+3. If BH1750 is disabled and Wi-Fi time is unavailable, day/night-dependent behavior now fails closed to night logic.
+4. Review threshold values in [../include/Settings.h](../include/Settings.h).
 
 ## OTA does not work
 

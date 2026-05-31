@@ -79,6 +79,7 @@ Measure the real final current draw before locking any fuse value into hardware.
 - Air temperature and humidity: DHT22 / AM2302 on the configured digital input.
 - Vent actuators: 2 x SG90 servos on the dedicated 5 V servo rail.
 - Optional sensors not yet required for this starter path: BH1750 and DS18B20.
+- Optional switched-load branches not enabled in the starter profile: defogger, grow light, and controller-switched circulation.
 
 ### Fuller upgrade path
 
@@ -198,7 +199,7 @@ LM2596 ground output
 - Do not leave any load branch without a common ground reference back to the controller.
 - Do not connect the power-bank output or any raw battery rail directly to an ESP32 ADC pin.
 - For this board family, use the onboard battery-read path rather than adding a second direct battery wire to an ESP32 ADC input.
-- Verify the reported battery voltage against a meter on the real battery before trusting the percentage mapping.
+- Verify the reported battery voltage against a meter on the real battery before trusting the percentage mapping, and leave `Settings::BATTERY.calibrationVerified` false until that check is complete.
 - Keep the controller box dry and the power bank replaceable.
 - Label the load branches physically once wired.
 - Use 18 AWG for any branch that actually carries actuator or fan current.

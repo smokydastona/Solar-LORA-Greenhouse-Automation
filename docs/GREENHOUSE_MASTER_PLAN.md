@@ -107,6 +107,8 @@ The first-generation automation system is split into two layers.
 
 - Manual `AUTO`, `OPEN`, and `CLOSED` modes are implemented.
 - Automatic mode now applies a conservative air-sensor fallback: vent-open when the resolved day/night state is day, vent-closed when the resolved day/night state is night.
+- If neither a valid light reading nor a valid local time source is available, the resolver now fails closed to night behavior rather than silently assuming daytime.
+- The starter firmware profile now leaves defogger, grow-light, and controller-switched circulation outputs disabled until those branches are physically installed and explicitly enabled in settings.
 - CSV logging to internal LittleFS is implemented.
 - Separate boot-event logging now records reset reason, boot count, safe-mode state, and failed-boot count.
 - Display and CSV logs now surface sensor availability explicitly so missing probes do not masquerade as valid zero readings.

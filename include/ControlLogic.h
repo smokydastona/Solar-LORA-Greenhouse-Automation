@@ -133,7 +133,7 @@ inline bool resolveDaylight(const SensorSnapshot &snapshot,
     return inGrowLightWindow(climate, hasTime, currentMinute);
   }
 
-  return true;
+  return false;
 }
 
 inline const CropProfile &cropProfile(CropProfileId id) {

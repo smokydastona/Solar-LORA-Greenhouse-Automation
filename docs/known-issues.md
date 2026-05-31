@@ -15,7 +15,7 @@ It is not a duplicate of [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md). T
 ### Battery telemetry is voltage-only today
 
 - The board now reads battery voltage through the onboard battery-read path.
-- The value still needs meter verification and calibration on the real board.
+- The value still needs meter verification and the firmware now exposes whether that calibration has been explicitly verified.
 - Solar current, charge state, daily energy harvest, and runtime estimation are not yet live firmware features.
 
 ### OTA is convenience-only, not a field-proof update path

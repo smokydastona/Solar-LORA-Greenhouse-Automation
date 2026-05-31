@@ -142,7 +142,7 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - ESP32 task-watchdog and application-progress watchdog recovery policy
 - Time-limited servo drive windows with cooldown-based protection against repeated retriggering
 - VPD, dew point, frost risk, crop profile evaluation, and crop-status interpretation
-- Heltec onboard battery-voltage sensing on the board's `VBAT_Read` path
+- Heltec onboard battery-voltage sensing on the board's `VBAT_Read` path, with explicit telemetry showing whether the reading has been meter-verified on the deployed board
 - Optional MQTT publishing with Home Assistant discovery payloads
 - LoRa telemetry queueing and packet-contract scaffolding, with the radio backend still intentionally unfinished
 
@@ -157,7 +157,7 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 ## Logic Test Harness
 
 - Shared control decisions now live in [include/ControlLogic.h](./include/ControlLogic.h).
-- Host-side tests for mode transitions and air-sensor fallback live in [test/control_logic/test_control_logic.cpp](./test/control_logic/test_control_logic.cpp).
+- Host-side tests for mode transitions and air-sensor fallback live in [test/test_control_logic/test_control_logic.cpp](./test/test_control_logic/test_control_logic.cpp).
 - If PlatformIO and a native compiler are available, run `pio test -e control_logic_native`.
 
 ## Reality Status
@@ -190,7 +190,7 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - Reliability primitives such as boot tracking, safe mode, watchdog handling, flash-write discipline, and sensor-availability reporting now exist in code.
 - Greenhouse intelligence now goes beyond raw temperature and humidity and includes VPD, dew point, frost risk, and crop profiles.
 - Optional MQTT and Home Assistant discovery are implemented, and the LoRa payload and retry queue contract now exists, but richer integrations such as Grafana, Prometheus, REST, webhooks, and a finished LoRa radio backend remain future work.
-- Power telemetry is still earlier than the rest of the system: onboard battery sensing is wired in firmware, but solar current, charge-state telemetry, and full energy accounting are not yet complete.
+- Power telemetry is still earlier than the rest of the system: onboard battery sensing is wired in firmware, but it ships unverified until the deployed board is meter-checked and marked calibrated in settings, and solar current, charge-state telemetry, and full energy accounting are not yet complete.
 
 - This repo is already strong in system definition, safety boundaries, and build documentation.
 - The biggest remaining professionalization gaps are now power-system telemetry, richer telemetry consumers, irrigation instrumentation, LoRa transport completion, and broader fault sensing rather than the complete absence of reliability or telemetry primitives.

@@ -19,7 +19,7 @@ It is intentionally blunt about what already exists, what is missing, and what w
 
 - The repo has a coherent system boundary: the 5 V controller layer is separate from the independent direct-solar fan and the future 12 V winter backbone.
 - Wiring, build, materials, and safety guidance already exist and are internally consistent.
-- Shared control logic is isolated in [../include/ControlLogic.h](../include/ControlLogic.h) with host-side tests in [../test/control_logic/test_control_logic.cpp](../test/control_logic/test_control_logic.cpp).
+- Shared control logic is isolated in [../include/ControlLogic.h](../include/ControlLogic.h) with host-side tests in [../test/test_control_logic/test_control_logic.cpp](../test/test_control_logic/test_control_logic.cpp).
 - GitHub Actions already build firmware, bundle docs, and publish the rendered docs site.
 - The repo now avoids false claims about sensor availability, log integrity, and Pages deployment status.
 

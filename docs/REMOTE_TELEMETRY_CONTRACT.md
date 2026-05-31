@@ -85,6 +85,7 @@ The current state topic publishes a retained JSON document shaped like this:
   },
   "battery": {
     "available": false,
+    "calibrated": false,
     "voltage_v": 0.0,
     "percent": 0,
     "low": false,
@@ -158,12 +159,13 @@ Maps directly to ESP32 reset categories such as:
 
 ### `battery`
 
-Battery values only become meaningful when the optional voltage divider hardware is installed and enabled in settings.
+Battery values come from the board's onboard `VBAT_Read` path when voltage monitoring is enabled in settings.
 
-Until then:
+Interpret them like this:
 
 - `available` remains `false`
-- voltage and percent are placeholders for the disabled monitor path and should not be treated as live battery truth
+- `calibrated` remains `false` until the reading has been checked against a real meter and explicitly marked verified in settings
+- voltage and percent should not be treated as trusted operational battery truth until both `available` and `calibrated` are `true`
 
 ### `health`
 
@@ -183,6 +185,11 @@ When discovery is enabled, the firmware currently publishes discovery for:
 - health score
 - crop status
 - frost risk
+- exhaust fan state
+- intake fan state
+- defogger state
+- grow-light state
+- circulation state
 
 The current integration is read-only. It does not yet accept mode changes or remote actuator commands.
 
