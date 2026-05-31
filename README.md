@@ -138,10 +138,13 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - Optional Wi-Fi and OTA update support when Wi-Fi credentials are configured
 - Preferences-backed boot reason logging and boot-failure tracking
 - Safe-mode boot after repeated failed boots or by holding both override buttons during startup
+- Safe-mode entry on repeated air-sensor faults, brownout recovery, and unfinished-servo recovery boots
 - ESP32 task-watchdog and application-progress watchdog recovery policy
+- Time-limited servo drive windows with cooldown-based protection against repeated retriggering
 - VPD, dew point, frost risk, crop profile evaluation, and crop-status interpretation
 - Heltec onboard battery-voltage sensing on the board's `VBAT_Read` path
 - Optional MQTT publishing with Home Assistant discovery payloads
+- LoRa telemetry queueing and packet-contract scaffolding, with the radio backend still intentionally unfinished
 
 ## Quick Start
 
@@ -186,7 +189,7 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 
 - Reliability primitives such as boot tracking, safe mode, watchdog handling, flash-write discipline, and sensor-availability reporting now exist in code.
 - Greenhouse intelligence now goes beyond raw temperature and humidity and includes VPD, dew point, frost risk, and crop profiles.
-- Optional MQTT and Home Assistant discovery are implemented, but richer integrations such as Grafana, Prometheus, REST, webhooks, and finished LoRa transport remain future work.
+- Optional MQTT and Home Assistant discovery are implemented, and the LoRa payload and retry queue contract now exists, but richer integrations such as Grafana, Prometheus, REST, webhooks, and a finished LoRa radio backend remain future work.
 - Power telemetry is still earlier than the rest of the system: onboard battery sensing is wired in firmware, but solar current, charge-state telemetry, and full energy accounting are not yet complete.
 
 - This repo is already strong in system definition, safety boundaries, and build documentation.

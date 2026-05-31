@@ -112,11 +112,12 @@ The first-generation automation system is split into two layers.
 - Display and CSV logs now surface sensor availability explicitly so missing probes do not masquerade as valid zero readings.
 - OTA is optional and only available when Wi-Fi credentials are configured and OTA is enabled.
 - Safe-mode boot is now implemented for manual recovery entry and repeated unfinished boots.
+- Brownout-triggered safe mode, unfinished-servo recovery boot handling, and repeated air-sensor-fault escalation are now implemented.
 - ESP32 task-watchdog and application-progress watchdog recovery are now implemented.
 - VPD, dew point, frost-risk, and crop-profile interpretation are now implemented.
 - Optional MQTT publishing and Home Assistant discovery are now implemented for remote telemetry consumers.
 - Battery-voltage awareness is implemented against the Heltec board's onboard `VBAT_Read` and `ADC_Ctrl` path and still requires on-device calibration confirmation before the reading should be trusted operationally.
-- Servo-jam detection is still not implemented.
+- Servo movement is now time-limited with cooldown-based protection, but direct current-sensed jam detection is still not implemented.
 
 See [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) for the explicit boundary between implemented behavior and documented design targets.
 
@@ -147,7 +148,7 @@ See [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) for the explicit bounda
 - Local logging in v1 is internal flash via LittleFS CSV files.
 - No SD card is part of the v1 design.
 - Remote telemetry is now optional over MQTT and is not required for local greenhouse operation.
-- LoRa capability exists on the target board but is not part of the active first-generation control requirement.
+- LoRa capability exists on the target board, and the firmware now includes a compact payload plus queue and retry abstraction, but the live radio backend is still not part of the active first-generation control requirement.
 - USB flashing remains the guaranteed firmware update path.
 - OTA is optional over Wi-Fi when credentials are configured and the OTA flag is enabled.
 - A watchdog-based self-recovery policy is now part of the documented firmware behavior.

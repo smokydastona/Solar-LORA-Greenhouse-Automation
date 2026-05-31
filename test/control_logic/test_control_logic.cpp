@@ -2,6 +2,7 @@
 
 #include "ControlLogic.h"
 #include "ControlLogicDefaults.h"
+#include "LoRaLink.h"
 
 namespace {
 
@@ -28,6 +29,32 @@ GreenhouseLogic::EvaluationContext baseContext() {
   ctx.snapshot.lightLux = 15000.0F;
   return ctx;
 }
+
+class FakeLoRaTransport : public GreenhouseLoRa::ILoRaTransport {
+ public:
+  bool beginResult = true;
+  bool readyState = true;
+  bool sendResult = true;
+  uint32_t sendCount = 0;
+
+  bool begin() override {
+    return beginResult;
+  }
+
+  bool ready() const override {
+    return readyState;
+  }
+
+  bool send(const GreenhouseLoRa::TelemetryFrame &, GreenhouseLoRa::LinkStats &) override {
+    ++sendCount;
+    return sendResult;
+  }
+
+  void poll(GreenhouseLoRa::LinkStats &stats) override {
+    stats.backendConfigured = true;
+    stats.backendReady = readyState;
+  }
+};
 
 void test_mode_cycle_wraps_in_expected_order() {
   TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseLogic::ControlMode::forceOpen),
@@ -376,6 +403,59 @@ void test_lettuce_profile_reports_stressed_conditions_when_too_hot() {
                           static_cast<uint8_t>(metrics.cropStatus));
 }
 
+void test_lora_link_service_sends_queued_frame_when_transport_is_ready() {
+  FakeLoRaTransport transport;
+  GreenhouseLoRa::LinkService link(transport);
+  link.begin(true, "node-a", 2, 1000U);
+
+  TEST_ASSERT_TRUE(link.queueTelemetry("temp=24.1", 10U));
+
+  link.poll(10U);
+
+  TEST_ASSERT_EQUAL_UINT32(1U, transport.sendCount);
+  TEST_ASSERT_EQUAL_UINT32(1U, link.stats().sentFrames);
+  TEST_ASSERT_EQUAL_UINT8(0U, link.stats().queueDepth);
+}
+
+void test_lora_link_service_retries_and_drops_after_max_retries() {
+  FakeLoRaTransport transport;
+  transport.sendResult = false;
+  GreenhouseLoRa::LinkService link(transport);
+  link.begin(true, "node-b", 1, 100U);
+
+  TEST_ASSERT_TRUE(link.queueTelemetry("temp=22.0", 0U));
+
+  link.poll(0U);
+  TEST_ASSERT_EQUAL_UINT32(1U, link.stats().failedSendAttempts);
+  TEST_ASSERT_EQUAL_UINT8(1U, link.stats().queueDepth);
+
+  link.poll(150U);
+  TEST_ASSERT_EQUAL_UINT32(2U, link.stats().failedSendAttempts);
+  TEST_ASSERT_EQUAL_UINT32(1U, link.stats().droppedFrames);
+  TEST_ASSERT_EQUAL_UINT8(0U, link.stats().queueDepth);
+}
+
+void test_compact_lora_telemetry_contains_core_fields() {
+  char payload[GreenhouseLoRa::kPayloadSize];
+  GreenhouseLoRa::buildCompactTelemetry(payload,
+                                        sizeof(payload),
+                                        "node-c",
+                                        "AUTO",
+                                        false,
+                                        87,
+                                        true,
+                                        24.5F,
+                                        68.0F,
+                                        true,
+                                        3.91F,
+                                        76);
+
+  TEST_ASSERT_NOT_EQUAL(nullptr, strstr(payload, "n=node-c"));
+  TEST_ASSERT_NOT_EQUAL(nullptr, strstr(payload, "m=AUTO"));
+  TEST_ASSERT_NOT_EQUAL(nullptr, strstr(payload, "h=87"));
+  TEST_ASSERT_NOT_EQUAL(nullptr, strstr(payload, "bp=76"));
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -407,5 +487,8 @@ int main(int argc, char **argv) {
   RUN_TEST(test_frost_risk_triggers_for_near_freezing_air_conditions);
   RUN_TEST(test_tomato_profile_reports_optimal_conditions);
   RUN_TEST(test_lettuce_profile_reports_stressed_conditions_when_too_hot);
+  RUN_TEST(test_lora_link_service_sends_queued_frame_when_transport_is_ready);
+  RUN_TEST(test_lora_link_service_retries_and_drops_after_max_retries);
+  RUN_TEST(test_compact_lora_telemetry_contains_core_fields);
   return UNITY_END();
 }

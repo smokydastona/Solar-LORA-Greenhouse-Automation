@@ -138,14 +138,19 @@ This is the build sequence for the complete first-generation controller system i
 8. Let the system run for at least one day before changing thresholds.
 9. Verify the reported battery voltage against a multimeter before trusting the percentage value.
 10. If MQTT is enabled, verify that the retained state topic and Home Assistant discovery entities appear as expected.
+11. Simulate a repeated air-sensor failure and verify the controller enters safe mode instead of continuing blind climate control.
+12. After any forced reboot during servo travel, confirm the controller comes back in safe mode and requires inspection before normal operation resumes.
 
 ## Safe-mode and recovery behavior
 
 1. The firmware now records reset reason and tracks repeated failed boots in `Preferences`.
 2. Holding both override buttons during boot enters safe mode immediately.
 3. Repeated unfinished boots also force safe mode.
-4. In safe mode, the controller suppresses climate outputs and keeps the greenhouse in a quiet, inspectable state.
-5. Press the mode button while in safe mode to clear the boot-failure counter and reboot after the underlying problem is fixed.
+4. Brownout resets and unfinished-servo recovery boots also enter safe mode so vent travel can be rechecked before unattended operation resumes.
+5. Repeated invalid air-sensor reads can escalate to safe mode, and that fault path opens both vents as the conservative inspection posture.
+6. Servo movement is intentionally time-limited and detached after a short drive window; repeated attempts during the cooldown window can also force safe mode.
+7. In safe mode, the controller suppresses climate outputs and keeps the greenhouse in a quiet, inspectable state.
+8. Press the mode button while in safe mode to clear the boot-failure counter and reboot after the underlying problem is fixed.
 
 ## First-week field checks
 

@@ -6,11 +6,11 @@ It is not a duplicate of [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md). T
 
 ## Current Known Issues
 
-### Servo jam and stall protection is not implemented
+### Servo protection is conservative, not fully instrumented
 
-- The firmware can command vent motion, but it does not yet detect a stalled or jammed servo.
-- A mechanical bind, ice, or linkage problem can still overstress SG90-class hardware.
-- Until this is implemented, keep servo travel conservative and treat bench travel checks as mandatory.
+- The firmware now uses time-limited servo drive windows, cooldown lockout, and safe-mode escalation on repeated retrigger attempts.
+- It still does not measure servo current or true motion feedback, so a hard mechanical bind can still go undiagnosed electrically.
+- Keep servo travel conservative and treat bench travel checks as mandatory until a hardware-backed jam signal exists.
 
 ### Battery telemetry is voltage-only today
 
@@ -24,11 +24,12 @@ It is not a duplicate of [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md). T
 - USB flashing remains the guaranteed recovery and service path.
 - A rollback-capable OTA strategy is not yet claimed.
 
-### LoRa hardware exists, but greenhouse LoRa transport does not
+### LoRa contract exists, but the radio backend is still unfinished
 
 - The target board includes LoRa hardware.
-- The active first-generation implementation still uses local control and optional Wi-Fi MQTT telemetry.
-- Do not assume there is already a completed radio telemetry protocol, packet retry policy, or link-quality layer in this repo.
+- The firmware now includes a compact payload format plus queue and retry scaffolding for LoRa telemetry.
+- The active first-generation implementation still uses local control and optional Wi-Fi MQTT telemetry for the real deployed path.
+- Do not assume there is already a completed SX1262 transport driver, verified radio commissioning flow, or link-quality layer in this repo.
 
 ### The 12 V winter architecture is documented, not deployed
 

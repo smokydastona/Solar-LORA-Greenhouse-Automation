@@ -26,6 +26,7 @@ struct ServoConfig {
 
 struct LoggingConfig {
   const char *path;
+  const char *bootLogPath;
   uint32_t sampleIntervalMs;
   uint32_t displayIntervalMs;
   uint32_t controlIntervalMs;
@@ -39,6 +40,13 @@ struct ReliabilityConfig {
   uint32_t softwareWatchdogTimeoutMs;
   uint32_t bootHealthyAfterMs;
   uint8_t safeModeAfterBootFailures;
+  bool brownoutEntersSafeMode;
+  bool airSensorFaultEntersSafeMode;
+  uint8_t maxConsecutiveAirSensorFaults;
+  uint32_t sensorFaultRecoveryDelayMs;
+  uint32_t servoDriveWindowMs;
+  uint32_t servoCooldownMs;
+  uint8_t servoProtectionTripsBeforeSafeMode;
 };
 
 struct BatteryMonitorConfig {
@@ -64,6 +72,14 @@ struct MqttConfig {
   bool enableHomeAssistantDiscovery;
   uint32_t reconnectIntervalMs;
   uint32_t publishIntervalMs;
+};
+
+struct LoRaConfig {
+  bool enableTransport;
+  const char *nodeId;
+  uint8_t queueDepth;
+  uint8_t maxRetries;
+  uint32_t retryBackoffMs;
 };
 
 struct CropConfig {
@@ -99,6 +115,7 @@ constexpr ServoConfig SERVOS{
 
 constexpr LoggingConfig LOGGING{
     "/climate_log.csv",
+  "/boot_log.csv",
     300000UL,
     2000UL,
     5000UL,
@@ -112,6 +129,13 @@ constexpr ReliabilityConfig RELIABILITY{
   20000UL,
   60000UL,
   3,
+  true,
+  true,
+  3,
+  30000UL,
+  1200UL,
+  4000UL,
+  2,
 };
 
 constexpr BatteryMonitorConfig BATTERY{
@@ -137,6 +161,14 @@ constexpr MqttConfig MQTT{
   true,
   10000UL,
   30000UL,
+};
+
+constexpr LoRaConfig LORA{
+  false,
+  "mini-greenhouse-01",
+  8,
+  3,
+  5000UL,
 };
 
 constexpr CropConfig CROP{

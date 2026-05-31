@@ -13,18 +13,23 @@ Use this file to prevent over-trusting the controller during deployment planning
 - OTA is optional and only available when Wi-Fi credentials are configured and OTA is enabled.
 - Preferences-backed boot reason logging and failed-boot counting are implemented.
 - Safe-mode boot is implemented for repeated failed boots and manual two-button entry at startup.
+- Brownout-triggered safe mode and unfinished-servo recovery boot handling are implemented.
 - An ESP32 task watchdog and an application-progress watchdog are implemented.
+- Repeated invalid air-sensor reads can now escalate into safe mode.
+- Servo movement is now time-limited and detached after a drive window, with repeated retrigger attempts able to force safe mode.
 - VPD, dew point, frost-risk evaluation, and crop-profile interpretation are implemented.
 - MQTT publishing and Home Assistant discovery are implemented when configured.
+- A compact LoRa telemetry payload, queue, and retry policy abstraction are implemented in code, even though the concrete radio backend is still disabled.
 - The controller supports the current owned-hardware DHT22 plus SG90 path and the fuller BME280 plus DS18B20 plus BH1750 path documented elsewhere in the repo.
 
 ## Not currently implemented as verified firmware features
 
 - Battery-voltage awareness is enabled for the Heltec onboard `VBAT_Read` path, but the reading should still be checked against a meter and trimmed with the calibration offset on the real board.
-- Servo-jam detection is not implemented.
+- Direct current-sensed servo-stall detection is not implemented.
 - Remote mode commands are not implemented; the current MQTT and Home Assistant path is read-only state telemetry.
 - Hardware-in-the-loop validation is not part of the current repo workflow.
 - LittleFS is no longer auto-formatted on mount failure; a storage fault now leaves logging disabled until the filesystem is repaired deliberately.
+- The LoRa abstraction does not yet include a live SX1262 transport driver, link-quality metrics, or verified over-the-air commissioning flow.
 
 ## Host-side control-logic coverage now present
 
@@ -38,6 +43,7 @@ Use this file to prevent over-trusting the controller during deployment planning
 - Host-side tests cover the conservative main air-sensor fallback behavior.
 - Host-side tests cover defogger night gating and heater off-threshold behavior.
 - Host-side tests cover grow-light schedule and lux-threshold edge cases.
+- Host-side tests cover LoRa queue send, retry, drop, and compact-payload formatting behavior.
 - These tests validate the shared control-decision function, not the full board-level hardware stack.
 
 ## Safe operating interpretation

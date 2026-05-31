@@ -6,11 +6,13 @@ It exists so dashboards, Home Assistant, and any future LoRa or cloud bridge can
 
 ## Transport
 
-- Transport: MQTT over Wi-Fi
+- Primary transport: MQTT over Wi-Fi
+- Secondary firmware contract: compact LoRa payload queued through the internal radio abstraction
 - MQTT client library: PubSubClient
 - State publishing: retained JSON payloads
 - Availability: retained `online` or `offline` topic
 - Home Assistant integration: MQTT discovery payloads published automatically on broker connection when enabled
+- LoRa status exposure: queue depth plus sent and dropped counters are included in the JSON state payload
 
 ## Configuration surface
 
@@ -29,6 +31,8 @@ Relevant fields:
 - `discoveryPrefix`
 - `enableHomeAssistantDiscovery`
 - `publishIntervalMs`
+
+LoRa queue configuration lives beside it in [../include/Settings.h](../include/Settings.h) under `Settings::LORA`.
 
 ## Topics
 
@@ -101,10 +105,16 @@ The current state topic publishes a retained JSON document shaped like this:
   "connectivity": {
     "wifi": true,
     "mqtt": true,
-    "ota": false
+    "ota": false,
+    "lora": false
   },
   "storage": {
     "filesystem_ready": true
+  },
+  "lora": {
+    "queue_depth": 0,
+    "sent": 0,
+    "dropped": 0
   },
   "uptime_ms": 123456
 }
@@ -122,7 +132,7 @@ The current state topic publishes a retained JSON document shaped like this:
 ### `safe_mode`
 
 - `active`: whether the controller is suppressing all outputs and holding a conservative state
-- `reason`: `NONE`, `MANUAL`, or `BOOT`
+- `reason`: `NONE`, `MANUAL`, `BOOT`, `BROWNOUT`, `RECOVERY`, `SENSOR`, or `SERVO`
 - `boot_failures`: consecutive pending-boot count observed by the preferences-backed boot policy
 
 ### `reset_reason`
@@ -176,6 +186,19 @@ When discovery is enabled, the firmware currently publishes discovery for:
 
 The current integration is read-only. It does not yet accept mode changes or remote actuator commands.
 
+## LoRa compact payload contract
+
+The firmware also builds a compact ASCII payload for the internal LoRa queue. It is designed for low-bandwidth telemetry and currently includes:
+
+- node id
+- mode
+- safe-mode flag
+- health score
+- air temperature and humidity when available
+- battery voltage and percentage when available
+
+The queue and retry policy are implemented in firmware, but the concrete SX1262 radio transport is still intentionally disabled until the on-air backend is validated.
+
 ## Remote dashboard minimum viable layout
 
 Any dashboard consuming this contract should, at minimum, expose:
@@ -215,6 +238,7 @@ Any dashboard consuming this contract should, at minimum, expose:
 - Wi-Fi state
 - MQTT state
 - OTA enabled state
+- LoRa readiness plus queue and drop counters
 - filesystem readiness
 - uptime
 
