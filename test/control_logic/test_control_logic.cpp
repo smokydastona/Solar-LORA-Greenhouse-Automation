@@ -134,6 +134,58 @@ void test_fans_stay_off_between_fan_on_and_fan_off_thresholds_when_previously_of
   TEST_ASSERT_FALSE(actual.intakeFanOn);
 }
 
+void test_vent_fans_turn_off_at_night_even_when_heat_or_humidity_is_high() {
+  auto ctx = baseContext();
+  ctx.daylight = false;
+  ctx.snapshot.airTempC = 31.0F;
+  ctx.snapshot.humidityPct = 90.0F;
+  ctx.previousActuators.exhaustFanOn = true;
+  ctx.previousActuators.intakeFanOn = true;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_FALSE(actual.exhaustFanOn);
+  TEST_ASSERT_FALSE(actual.intakeFanOn);
+}
+
+void test_vent_fans_turn_back_on_in_daylight_when_thresholds_remain_exceeded() {
+  auto ctx = baseContext();
+  ctx.daylight = true;
+  ctx.snapshot.airTempC = 31.0F;
+  ctx.snapshot.humidityPct = 90.0F;
+  ctx.previousActuators.exhaustFanOn = false;
+  ctx.previousActuators.intakeFanOn = false;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_TRUE(actual.exhaustFanOn);
+  TEST_ASSERT_TRUE(actual.intakeFanOn);
+}
+
+void test_circulation_fans_turn_on_during_daytime_mixing_conditions() {
+  auto ctx = baseContext();
+  ctx.daylight = true;
+  ctx.snapshot.airTempC = 24.0F;
+  ctx.snapshot.humidityPct = 75.0F;
+  ctx.previousActuators.circulationFansOn = false;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_TRUE(actual.circulationFansOn);
+}
+
+void test_circulation_fans_turn_off_at_night_even_when_previously_on() {
+  auto ctx = baseContext();
+  ctx.daylight = false;
+  ctx.snapshot.airTempC = 24.0F;
+  ctx.snapshot.humidityPct = 75.0F;
+  ctx.previousActuators.circulationFansOn = true;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_FALSE(actual.circulationFansOn);
+}
+
 void test_sensor_failure_daytime_opens_vents_and_turns_off_climate_outputs() {
   auto ctx = baseContext();
   ctx.snapshot.airAvailable = false;
@@ -267,6 +319,10 @@ int main(int argc, char **argv) {
   RUN_TEST(test_vents_stay_closed_between_open_and_close_thresholds_when_previously_closed);
   RUN_TEST(test_fans_stay_on_between_fan_on_and_fan_off_thresholds_when_previously_on);
   RUN_TEST(test_fans_stay_off_between_fan_on_and_fan_off_thresholds_when_previously_off);
+  RUN_TEST(test_vent_fans_turn_off_at_night_even_when_heat_or_humidity_is_high);
+  RUN_TEST(test_vent_fans_turn_back_on_in_daylight_when_thresholds_remain_exceeded);
+  RUN_TEST(test_circulation_fans_turn_on_during_daytime_mixing_conditions);
+  RUN_TEST(test_circulation_fans_turn_off_at_night_even_when_previously_on);
   RUN_TEST(test_sensor_failure_daytime_opens_vents_and_turns_off_climate_outputs);
   RUN_TEST(test_sensor_failure_night_closes_vents_and_turns_off_climate_outputs);
   RUN_TEST(test_grow_light_uses_schedule_and_lux_threshold);
