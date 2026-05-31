@@ -8,7 +8,7 @@ Reference diagram: [5 V summer architecture](./diagrams/greenhouse-5v-summer-arc
 | --- | --- |
 | I2C SDA | GPIO 8 |
 | I2C SCL | GPIO 9 |
-| DHT22 air sensor data | GPIO 16 provisional default |
+| DHT22 air sensor data | GPIO 16 verified on Header J3 pin 17 |
 | DS18B20 water probe | GPIO 10 |
 | Top vent servo signal | GPIO 3 |
 | Bottom vent servo signal | GPIO 4 |
@@ -81,9 +81,15 @@ Measure the real final current draw before locking any fuse value into hardware.
 
 - VCC -> 5 V
 - GND -> GND
-- DATA -> GPIO 16 provisional default
+- DATA -> GPIO 16
 - If using a bare sensor instead of a module, add the pull-up resistor required by that part
-- Before permanent installation, verify that GPIO 16 is actually free on the exact SX1262 LoRa V3 board revision being used
+- GPIO 16 is verified as a broken-out header pin on this Heltec-style SX1262 LoRa V3 family and is not listed in the board manual's onboard OLED, LoRa, LED, or user-button wiring table
+
+### Board-specific warning
+
+- This exact board family reserves several pins for onboard LoRa and OLED wiring.
+- GPIO 16 is safe to lock for the DHT22 path based on the published pinout image and wiring table.
+- Do not assume the rest of the repo's current generic `esp32-s3-devkitc-1` greenhouse pin map is already final for this exact LoRa board; the full board-specific pin remap still needs a separate verified pass.
 
 ### BME280
 
@@ -175,4 +181,5 @@ LM2596 ground output
 - Label the load branches physically once wired.
 - Use 18 AWG for any branch that actually carries actuator or fan current.
 - Treat 22 AWG to 24 AWG as signal and sensor wire only.
-- Treat the DHT22 GPIO choice as provisional until the exact LoRa board free-pin map is verified against the real board in hand.
+- Treat GPIO 16 as the locked DHT22 data pin on this board family.
+- Treat the remainder of the board-specific greenhouse pin map as still needing a dedicated verified remap before permanent wiring.

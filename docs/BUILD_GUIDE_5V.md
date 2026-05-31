@@ -10,7 +10,8 @@ This is the build sequence for the complete first-generation controller system i
 
 - The default firmware configuration now supports the currently owned starter hardware: one DHT22 / AM2302 for air temperature and humidity and two SG90 vent servos.
 - In that starter path, BH1750 and DS18B20 stay optional and disabled until those sensors are actually added.
-- The configured DHT22 pin is currently [include/PinMap.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/PinMap.h) `TEMP_AIR_DHT` on GPIO 16. That pin choice must still be checked against the exact SX1262 LoRa V3 board pinout before permanent wiring because the board-specific free-pin map has not been physically verified in this repo.
+- The DHT22 data pin is now locked to [include/PinMap.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/PinMap.h) `TEMP_AIR_DHT` on GPIO 16. On the Heltec-style SX1262 LoRa V3 pinout used by your bought board, GPIO 16 is broken out on Header J3 physical pin 17 and is not shown as one of the board's pre-wired OLED, LoRa, LED, or button signals.
+- Separate warning: that same board pinout shows several onboard reservations that do not match the repo's generic `esp32-s3-devkitc-1` pin assumptions. GPIO 16 is now verified for the DHT22 path, but the rest of the final board-specific greenhouse pin map still needs its own exact remap pass before permanent full-system wiring.
 
 ### Fuller upgrade path
 
