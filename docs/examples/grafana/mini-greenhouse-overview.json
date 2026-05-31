@@ -1,0 +1,70 @@
+{
+  "title": "Mini Greenhouse Overview",
+  "editable": true,
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Health Score",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mini_greenhouse_health_score"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Air Temperature",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mini_greenhouse_air_temperature_c"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 0 }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Humidity",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mini_greenhouse_humidity_pct"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 18, "y": 0 }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "VPD",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mini_greenhouse_vpd_kpa"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Battery Voltage",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mini_greenhouse_battery_voltage_v"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s"
+}

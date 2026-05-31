@@ -1,0 +1,31 @@
+title: Mini Greenhouse
+views:
+  - title: Greenhouse
+    path: greenhouse
+    icon: mdi:greenhouse
+    cards:
+      - type: entities
+        title: Overview
+        show_header_toggle: false
+        entities:
+          - entity: sensor.mini_greenhouse_health_score
+          - entity: sensor.mini_greenhouse_crop_status
+          - entity: sensor.mini_greenhouse_vpd
+          - entity: sensor.mini_greenhouse_dew_point
+          - entity: binary_sensor.mini_greenhouse_frost_risk
+      - type: entities
+        title: Environment
+        show_header_toggle: false
+        entities:
+          - entity: sensor.mini_greenhouse_air_temperature
+          - entity: sensor.mini_greenhouse_humidity
+          - entity: sensor.mini_greenhouse_battery_percentage
+      - type: entities
+        title: Actuation
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.mini_greenhouse_fan_exhaust
+          - entity: binary_sensor.mini_greenhouse_fan_intake
+          - entity: binary_sensor.mini_greenhouse_defogger
+          - entity: binary_sensor.mini_greenhouse_grow_light
+          - entity: binary_sensor.mini_greenhouse_circulation

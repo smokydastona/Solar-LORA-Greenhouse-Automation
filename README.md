@@ -89,6 +89,9 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - [docs/troubleshooting.md](./docs/troubleshooting.md): field and bench diagnosis
 - [docs/api.md](./docs/api.md): telemetry contract and integration surface
 - [docs/development.md](./docs/development.md): contributor workflow, testing, and CI surface
+- [docs/dashboards.md](./docs/dashboards.md): dashboard guidance and starter Home Assistant and Grafana artifacts
+- [docs/versioning.md](./docs/versioning.md): release and versioning rules for firmware, docs, and telemetry
+- [docs/power-telemetry-roadmap.md](./docs/power-telemetry-roadmap.md): staged plan for serious solar and battery telemetry
 
 ## What Is In This Repository
 
@@ -105,6 +108,9 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - Contributor workflow guidance in [docs/DEVELOPER_GUIDE.md](./docs/DEVELOPER_GUIDE.md)
 - Field and bench recovery guidance in [docs/troubleshooting.md](./docs/troubleshooting.md)
 - MQTT, Home Assistant, and dashboard payload contract in [docs/REMOTE_TELEMETRY_CONTRACT.md](./docs/REMOTE_TELEMETRY_CONTRACT.md)
+- Dashboard integration guidance and starter configs in [docs/dashboards.md](./docs/dashboards.md)
+- Versioning and release-note policy in [docs/versioning.md](./docs/versioning.md)
+- Versioned release history in [CHANGELOG.md](./CHANGELOG.md)
 
 ## GitHub Automation
 
@@ -167,6 +173,8 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - Use [docs/PROFESSIONALIZATION_ROADMAP.md](./docs/PROFESSIONALIZATION_ROADMAP.md) for the prioritized path from current repo state to a more deployable open-source system.
 - Use [docs/DEVELOPER_GUIDE.md](./docs/DEVELOPER_GUIDE.md) before refactoring firmware, adding telemetry, or changing pin and threshold behavior.
 - Use [docs/REMOTE_TELEMETRY_CONTRACT.md](./docs/REMOTE_TELEMETRY_CONTRACT.md) before building a dashboard, Home Assistant package, or telemetry bridge.
+- Use [docs/dashboards.md](./docs/dashboards.md) before wiring Home Assistant or Grafana around the current telemetry contract.
+- Use [CHANGELOG.md](./CHANGELOG.md) and [docs/versioning.md](./docs/versioning.md) when cutting or documenting future releases.
 
 ## Maturity Stance
 

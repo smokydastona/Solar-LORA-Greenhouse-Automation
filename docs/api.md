@@ -41,6 +41,7 @@ Implemented:
 
 - MQTT
 - Home Assistant
+- Dashboard starter configs documented in [dashboards.md](./dashboards.md)
 
 Not yet implemented as first-class repo surfaces:
 
@@ -58,3 +59,4 @@ If the payload shape or topic structure changes, [REMOTE_TELEMETRY_CONTRACT.md](
 
 - [REMOTE_TELEMETRY_CONTRACT.md](./REMOTE_TELEMETRY_CONTRACT.md)
 - [development.md](./development.md)
+- [dashboards.md](./dashboards.md)

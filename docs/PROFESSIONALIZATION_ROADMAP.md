@@ -8,9 +8,9 @@ It is intentionally blunt about what already exists, what is missing, and what w
 
 | Area | Current repo state | Professional target | Gap summary |
 | --- | --- | --- | --- |
-| Reliability | Basic conservative control, local logging, optional OTA | Fault-tolerant unattended recovery | Major gap |
-| Greenhouse intelligence | Threshold-based climate control | Plant-aware optimization | Major gap |
-| Dashboard and telemetry | On-device OLED and CSV only | Remote dashboard and history | Major gap |
+| Reliability | Conservative control plus watchdogs, safe mode, boot tracking, and local logging | Fault-tolerant unattended recovery | Moderate gap |
+| Greenhouse intelligence | Threshold-based climate control plus VPD, dew point, frost risk, and crop profiles | Plant-aware optimization | Moderate gap |
+| Dashboard and telemetry | OLED, CSV, MQTT, Home Assistant discovery, and starter dashboard docs | Remote dashboard and history | Moderate gap |
 | Automation engine | Fixed logic and manual override modes | Rules, schedules, seasonal logic | Major gap |
 | Hardware instrumentation | Air, water, and lux optional paths | Power, irrigation, and crop instrumentation | Moderate to major gap |
 | Open-source project quality | Strong build docs, wiring, safety docs, CI, tests | Full operator and developer package | Moderate gap |
@@ -25,12 +25,11 @@ It is intentionally blunt about what already exists, what is missing, and what w
 
 ## What still makes the project feel early-stage
 
-- No watchdog policy is documented as implemented.
-- No battery, solar, or charge-state telemetry exists in firmware.
+- Solar current, panel voltage, and charge-state telemetry are still missing.
 - No LoRa transport is implemented despite the target board including LoRa hardware.
-- No remote dashboard, MQTT feed, Home Assistant integration, or Prometheus-style metrics exist.
-- No crop profiles, VPD/dew point layer, or disease-risk model exist.
-- No troubleshooting guide or developer workflow entry point existed before this roadmap.
+- No Prometheus-style metrics, REST API, or webhook surface exists.
+- Dashboard packaging and screenshots are still early.
+- Disease-risk modeling remains incomplete beyond the current greenhouse metrics layer.
 
 ## Priority order
 
@@ -49,15 +48,15 @@ The fastest route to a project that feels deployable rather than experimental is
 
 | Feature | Why it matters | Repo status | Suggested implementation path |
 | --- | --- | --- | --- |
-| Hardware watchdog | Recovers from hard firmware stalls | Not implemented | Use ESP32 task watchdog plus documented reset reason handling |
-| Software watchdog | Recovers from control-loop lockups | Not implemented | Track loop heartbeat and force controlled restart if timing budget is exceeded |
-| Brownout detection | Prevents undefined behavior during power collapse | Not implemented | Add voltage divider input and explicit brownout state machine |
-| Safe-mode boot | Prevents reboot loops after bad config or failing peripherals | Not implemented | Hold safe-mode GPIO at boot or trigger after repeated boot failures |
+| Hardware watchdog | Recovers from hard firmware stalls | Implemented | Keep validation and documentation aligned with real field behavior |
+| Software watchdog | Recovers from control-loop lockups | Implemented | Keep timing budget visible and validate behavior under real load |
+| Brownout detection | Prevents undefined behavior during power collapse | Not implemented | Add explicit brownout state handling once broader power telemetry exists |
+| Safe-mode boot | Prevents reboot loops after bad config or failing peripherals | Implemented | Keep recovery workflow simple and physically understandable |
 | Automatic recovery after power loss | Required for unattended service | Partially present | Persist recovery counters and restore last safe mode, thresholds, and service state |
 | Sensor failure detection | Avoids blind control | Partially present | Expand from availability flags to stale-data, out-of-range, and disagreement detection |
 | LoRa link-loss recovery | Required once remote nodes exist | Not implemented | Add heartbeat timeout, radio reset, and backoff reconnect policy |
 | Automatic reboot scheduling | Useful for long unattended uptime | Not implemented | Add configurable maintenance reboot window with boot reason logging |
-| Battery health monitoring | Prevents controller death and bad decisions | Not implemented | Read battery voltage and infer low, nominal, and critical bands |
+| Battery health monitoring | Prevents controller death and bad decisions | Partially implemented | Keep calibration honest and expand beyond voltage-only heuristics over time |
 | Solar charge monitoring | Distinguishes energy shortage from logic failure | Not implemented | Measure panel voltage and charge-path current where hardware allows |
 | Flash write protection | Preserves storage over long life | Partial | Rate-limit writes, rotate logs, and isolate config from telemetry churn |
 
@@ -85,12 +84,12 @@ The fastest route to a project that feels deployable rather than experimental is
 
 | Capability | Why it matters | Repo status |
 | --- | --- | --- |
-| VPD calculation | Gives plant-relevant humidity guidance | Not implemented |
-| Dew point calculation | Helps condensation and disease decisions | Not implemented |
+| VPD calculation | Gives plant-relevant humidity guidance | Implemented |
+| Dew point calculation | Helps condensation and disease decisions | Implemented |
 | Heat index | Improves hot-weather interpretation | Not implemented |
-| Frost warning | Important for shoulder-season risk | Not implemented |
+| Frost warning | Important for shoulder-season risk | Implemented |
 | Disease risk detection | Makes humidity data actionable | Not implemented |
-| Crop profiles | Allows different targets for tomatoes, lettuce, herbs, etc. | Not implemented |
+| Crop profiles | Allows different targets for tomatoes, lettuce, herbs, etc. | Implemented |
 | Growth-stage profiles | Makes thresholds seasonal and biological | Not implemented |
 
 ### Product-level target
@@ -104,9 +103,9 @@ Instead of showing only raw sensor values, the system should be able to say:
 
 ### Recommended implementation phases
 
-1. Add a pure-function greenhouse-metrics layer alongside [../include/ControlLogic.h](../include/ControlLogic.h).
-2. Start with VPD, dew point, and frost-risk calculations with unit tests.
-3. Add crop profile tables in configuration and expose them in docs and display state.
+1. Expand the current greenhouse-metrics layer alongside [../include/ControlLogic.h](../include/ControlLogic.h).
+2. Keep VPD, dew point, and frost-risk test coverage current as thresholds evolve.
+3. Grow crop profile tables and operator documentation together.
 4. Add disease-risk heuristics only after the base sensor set is trustworthy.
 
 ## 3. Dashboard and telemetry quality
@@ -115,7 +114,8 @@ Instead of showing only raw sensor values, the system should be able to say:
 
 - OLED provides local status.
 - CSV logs provide local evidence.
-- No remote UI exists.
+- MQTT and Home Assistant discovery now exist.
+- Starter dashboard documentation now exists, but richer history and visualization tooling are still incomplete.
 
 ### Professional target
 
@@ -131,7 +131,7 @@ Instead of showing only raw sensor values, the system should be able to say:
 
 1. Add a stable telemetry schema first.
 2. Publish telemetry through MQTT or HTTP JSON before building a custom dashboard.
-3. Add Home Assistant discovery and dashboards as the first remote UX target.
+3. Expand the current Home Assistant discovery and dashboard starter path as the first remote UX target.
 4. Only build a custom web dashboard after the telemetry model stops changing rapidly.
 
 ## 4. Automation engine
@@ -209,11 +209,11 @@ Instead of showing only raw sensor values, the system should be able to say:
 | --- | --- |
 | Troubleshooting guide | Added now, but field content still needs growth |
 | Developer guide | Added now, but should expand with architecture and release workflow over time |
-| API or telemetry contract | Missing |
+| API or telemetry contract | Present, but should evolve carefully with release discipline |
 | Screenshots of real hardware and dashboard | Missing |
 | CAD and PCB files | Missing |
-| Home Assistant integration docs | Missing |
-| MQTT schema docs | Missing |
+| Home Assistant integration docs | Present as a starter layer, but still light |
+| MQTT schema docs | Present |
 | Hardware-in-the-loop validation plan | Missing |
 
 ## Recommended 90-day roadmap
@@ -233,13 +233,13 @@ Instead of showing only raw sensor values, the system should be able to say:
 
 ### Phase 3: make the project inspectable remotely
 
-- Add MQTT or HTTP telemetry.
-- Add Home Assistant integration and a documented dashboard.
+- Expand MQTT telemetry and keep the contract stable.
+- Grow Home Assistant integration and documented dashboards.
 - Add remote diagnostics and node health summary.
 
 ### Phase 4: make the repo feel production-grade
 
-- Add screenshots, telemetry schema docs, release notes discipline, and commissioning evidence.
+- Add screenshots, stronger release-note discipline, and commissioning evidence.
 - Add a hardware-in-the-loop validation plan.
 - Add contribution and issue-triage norms if outside contributors begin arriving.
 

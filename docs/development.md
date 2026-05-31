@@ -49,10 +49,17 @@ Still missing or incomplete:
 - integration tests beyond the pure logic layer
 - rollback firmware path
 - Docker development environment
-- versioned changelog
+- richer release workflow and release automation beyond the new changelog discipline
+
+## Versioning And Release Notes
+
+- Release notes now live in [../CHANGELOG.md](../CHANGELOG.md).
+- Versioning rules now live in [versioning.md](./versioning.md).
+- Any public telemetry, wiring, or operator-behavior change should update the changelog in the same change set.
 
 ## Read Next
 
 - [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md)
 - [api.md](./api.md)
 - [architecture.md](./architecture.md)
+- [versioning.md](./versioning.md)
