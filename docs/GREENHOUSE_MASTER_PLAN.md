@@ -4,7 +4,9 @@
 
 This document is the single source of truth for the greenhouse project. It consolidates the current physical build state, the implemented 5 V automation layer, the always-on fan subsystem, the winter dome and solar-heater concept, and the future 12 V power and heating upgrade.
 
-Historical planning material from `docs/temp/` is reconciled in [docs/TEMP_PLAN_RECONCILIATION.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/TEMP_PLAN_RECONCILIATION.md). Use that note for context, but use this file and the active wiring/build docs as the current source of truth.
+Architecture and diagram status is indexed in [ARCHITECTURE_INDEX.md](./ARCHITECTURE_INDEX.md).
+
+Historical planning material from `docs/temp/` is reconciled in [temp/TEMP_PLAN_RECONCILIATION.md](./temp/TEMP_PLAN_RECONCILIATION.md). Use that note for context, but use this file and the active wiring/build docs as the current source of truth.
 
 Current reference diagrams:
 
@@ -107,6 +109,8 @@ The first-generation automation system is split into two layers.
 - CSV logging to internal LittleFS is implemented.
 - OTA is optional and only available when Wi-Fi credentials are configured and OTA is enabled.
 - The firmware does not currently have battery-voltage awareness, servo-jam detection, or a dedicated watchdog policy.
+
+See [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) for the explicit boundary between implemented behavior and documented design targets.
 
 ### Deployment-safe behavior target
 

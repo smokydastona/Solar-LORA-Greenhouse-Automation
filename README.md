@@ -9,10 +9,12 @@ The implementation is based on the full greenhouse planning conversation capture
 - PlatformIO firmware for the ESP32-S3 controller in [platformio.ini](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/platformio.ini) and [src/main.cpp](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/src/main.cpp)
 - Pin mapping and configurable thresholds in [include/PinMap.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/PinMap.h) and [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h)
 - The consolidated greenhouse master plan in [docs/GREENHOUSE_MASTER_PLAN.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/GREENHOUSE_MASTER_PLAN.md)
+- Canonical diagram and architecture navigation in [docs/ARCHITECTURE_INDEX.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/ARCHITECTURE_INDEX.md)
 - Step-by-step first-generation build instructions in [docs/BUILD_GUIDE_5V.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/BUILD_GUIDE_5V.md)
 - Detailed wiring references in [docs/WIRING_5V.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/WIRING_5V.md) and [docs/WIRING_12V_UPGRADE.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/WIRING_12V_UPGRADE.md)
 - A categorized bill of materials in [docs/MATERIALS_LIST.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/MATERIALS_LIST.md)
 - Seasonal and safety operating guidance in [docs/OPERATIONS_AND_SAFETY.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/OPERATIONS_AND_SAFETY.md)
+- Explicit implementation boundaries in [docs/FIRMWARE_LIMITATIONS.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/FIRMWARE_LIMITATIONS.md)
 
 ## GitHub automation
 
@@ -39,6 +41,25 @@ The implementation is based on the full greenhouse planning conversation capture
 3. Wire the hardware according to [docs/WIRING_5V.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/WIRING_5V.md), choosing either the current owned-hardware DHT22 plus SG90 path or the fuller BME280 plus BH1750 plus DS18B20 upgrade path.
 4. Flash the firmware to the ESP32-S3 board.
 5. Commission the system using the checklist in [docs/BUILD_GUIDE_5V.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/BUILD_GUIDE_5V.md).
+
+## Reality status
+
+| Subsystem | Planned | Implemented in repo | Physically installed |
+| --- | --- | --- | --- |
+| 5 V ESP32-S3 controller layer | Yes | Yes | Not yet installed in greenhouse |
+| Direct-solar USB fan branch | Yes | Documented as independent subsystem | Yes |
+| Dual vent actuation | Yes | Yes | Vents installed; controller actuation not yet installed |
+| Current DHT22 plus SG90 starter path | Yes | Yes | Hardware path available for buildout |
+| BME280 plus BH1750 plus DS18B20 upgrade path | Yes | Yes | Not confirmed installed |
+| Four-fan LM2596 mixing subsystem | Yes | Documented | Not confirmed installed |
+| 12 V winter backbone | Yes | Documented only | No |
+| Defogger branch | Yes | Output support documented in firmware and wiring docs | No |
+| Grow-light branch | Yes | Output support documented in firmware and wiring docs | No |
+
+## Canonical references
+
+- Use [docs/ARCHITECTURE_INDEX.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/ARCHITECTURE_INDEX.md) to determine which diagrams are current and which materials are reference-only.
+- Use [docs/FIRMWARE_LIMITATIONS.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/FIRMWARE_LIMITATIONS.md) before assuming a safety, recovery, or sensor-fallback behavior is already implemented.
 
 ## Design boundaries
 
