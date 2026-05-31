@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820" role="img" aria-labelledby="title desc">
+  <title id="title">Mini Greenhouse System Block Diagram</title>
+  <desc id="desc">Current 5 V greenhouse architecture with independent solar fan, ESP32-S3 controller, sensors, actuators, telemetry, and future 12 V backbone boundary.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f5f4ec; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #1f3322; }
+      .subtitle { font: 500 18px 'Segoe UI', Arial, sans-serif; fill: #3e5641; }
+      .box-title { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #183122; }
+      .body { font: 15px 'Segoe UI', Arial, sans-serif; fill: #24402d; }
+      .small { font: 13px 'Segoe UI', Arial, sans-serif; fill: #35513b; }
+      .boundary { font: 700 16px 'Segoe UI', Arial, sans-serif; fill: #8d5b24; }
+      .current { fill: #dfeeda; stroke: #4d7a51; stroke-width: 2; rx: 18; ry: 18; }
+      .independent { fill: #d7edf6; stroke: #3c7b8d; stroke-width: 2; rx: 18; ry: 18; }
+      .future { fill: #f9e9d7; stroke: #bd7c36; stroke-width: 2; stroke-dasharray: 8 7; rx: 18; ry: 18; }
+      .control { fill: #ecf4d8; stroke: #64823e; stroke-width: 2; rx: 18; ry: 18; }
+      .arrow { stroke: #35513b; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .arrow-soft { stroke: #6a8470; stroke-width: 2.5; fill: none; marker-end: url(#arrowhead); }
+      .arrow-future { stroke: #bd7c36; stroke-width: 3; fill: none; stroke-dasharray: 8 7; marker-end: url(#arrowheadFuture); }
+      .label { font: 600 14px 'Segoe UI', Arial, sans-serif; fill: #26452d; }
+      .legend-text { font: 600 14px 'Segoe UI', Arial, sans-serif; fill: #36523d; }
+    </style>
+    <marker id="arrowhead" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto">
+      <polygon points="0 0, 12 5, 0 10" fill="#35513b" />
+    </marker>
+    <marker id="arrowheadFuture" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto">
+      <polygon points="0 0, 12 5, 0 10" fill="#bd7c36" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1280" height="820" />
+
+  <text class="title" x="60" y="62">Mini Greenhouse System Block Diagram</text>
+  <text class="subtitle" x="60" y="92">Current 5 V deployment target plus explicit future 12 V boundary</text>
+
+  <rect class="independent" x="60" y="150" width="250" height="150" />
+  <text class="box-title" x="84" y="186">Independent Thermal Safety</text>
+  <text class="body" x="84" y="218">Direct-solar USB fan</text>
+  <text class="body" x="84" y="243">Runs only from sun</text>
+  <text class="body" x="84" y="268">No controller dependency</text>
+
+  <rect class="current" x="390" y="120" width="280" height="120" />
+  <text class="box-title" x="418" y="158">Solar + 5 V Buffer</text>
+  <text class="body" x="418" y="190">2 x 5 V 10 W panels</text>
+  <text class="body" x="418" y="215">Power bank energy buffer</text>
+
+  <rect class="future" x="940" y="120" width="280" height="130" />
+  <text class="box-title" x="968" y="158">Future 12 V Backbone</text>
+  <text class="body" x="968" y="190">Roof solar, MPPT, LiFePO4</text>
+  <text class="body" x="968" y="215">Separate winter architecture</text>
+  <text class="small" x="968" y="240">Not the active electrical backbone</text>
+
+  <rect class="control" x="430" y="300" width="420" height="190" />
+  <text class="box-title" x="458" y="338">ESP32-S3 Greenhouse Controller</text>
+  <text class="body" x="458" y="370">SX1262 LoRa V3 board with onboard OLED</text>
+  <text class="body" x="458" y="395">Control logic, safe mode, watchdogs, logging</text>
+  <text class="body" x="458" y="420">Optional MQTT, OTA, and raw LoRa telemetry</text>
+  <text class="small" x="458" y="452">Runtime modules: sensor HAL, battery HAL, display HAL</text>
+  <text class="small" x="458" y="476">Decision layer remains in shared control logic</text>
+
+  <rect class="current" x="70" y="410" width="290" height="220" />
+  <text class="box-title" x="98" y="448">Sensor Layer</text>
+  <text class="body" x="98" y="480">Starter path: DHT22 air sensor</text>
+  <text class="body" x="98" y="505">Upgrade path: BME280 + BH1750</text>
+  <text class="body" x="98" y="530">Water probe: DS18B20</text>
+  <text class="body" x="98" y="555">I2C and OneWire health surfaced</text>
+  <text class="body" x="98" y="580">Freshness windows prevent stale reads</text>
+
+  <rect class="current" x="440" y="570" width="250" height="170" />
+  <text class="box-title" x="468" y="608">Actuation Layer</text>
+  <text class="body" x="468" y="640">Top and bottom vent servos</text>
+  <text class="body" x="468" y="665">Servo drive window + cooldown</text>
+  <text class="body" x="468" y="690">Power budget can suppress moves</text>
+
+  <rect class="current" x="760" y="560" width="290" height="180" />
+  <text class="box-title" x="788" y="598">Switched 5 V Loads</text>
+  <text class="body" x="788" y="630">Exhaust and intake fans</text>
+  <text class="body" x="788" y="655">Defogger, grow light, circulation</text>
+  <text class="body" x="788" y="680">MOSFET branches on shared ground</text>
+  <text class="body" x="788" y="705">Load shedding on low battery</text>
+
+  <rect class="independent" x="1040" y="320" width="190" height="150" />
+  <text class="box-title" x="1064" y="358">Operator + Telemetry</text>
+  <text class="body" x="1064" y="390">OLED local status</text>
+  <text class="body" x="1064" y="415">LittleFS CSV logs</text>
+  <text class="body" x="1064" y="440">Wi-Fi MQTT / LoRa uplink</text>
+
+  <line class="arrow" x1="530" y1="240" x2="620" y2="300" />
+  <text class="label" x="530" y="285">5 V power</text>
+
+  <line class="arrow-soft" x1="310" y1="225" x2="430" y2="370" />
+  <text class="label" x="304" y="250">independent cooling path</text>
+
+  <line class="arrow" x1="360" y1="520" x2="430" y2="430" />
+  <text class="label" x="286" y="465">sensor data</text>
+
+  <line class="arrow" x1="640" y1="490" x2="610" y2="570" />
+  <text class="label" x="620" y="536">servo commands</text>
+
+  <line class="arrow" x1="760" y1="470" x2="870" y2="560" />
+  <text class="label" x="782" y="520">GPIO outputs</text>
+
+  <line class="arrow" x1="850" y1="395" x2="1040" y2="395" />
+  <text class="label" x="895" y="380">status and telemetry</text>
+
+  <line class="arrow-future" x1="940" y1="185" x2="850" y2="320" />
+  <text class="boundary" x="818" y="214">future buck / migration boundary</text>
+
+  <rect x="60" y="700" width="290" height="70" fill="#ffffff" stroke="#c5d4c5" stroke-width="1.5" rx="14" ry="14" />
+  <rect class="current" x="80" y="722" width="28" height="20" />
+  <text class="legend-text" x="120" y="737">Active controller-backed 5 V system</text>
+  <rect class="independent" x="80" y="746" width="28" height="20" />
+  <text class="legend-text" x="120" y="761">Independent subsystem</text>
+
+  <rect x="900" y="700" width="320" height="70" fill="#ffffff" stroke="#e0c8aa" stroke-width="1.5" rx="14" ry="14" />
+  <rect class="future" x="920" y="722" width="28" height="20" />
+  <text class="legend-text" x="960" y="737">Documented future system, not current deployment</text>
+  <text class="small" x="920" y="760">Preserves the repo's current 5 V truth boundary.</text>
+</svg>

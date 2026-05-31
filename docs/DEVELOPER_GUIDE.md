@@ -6,7 +6,8 @@ It is not a generic ESP32 template. It reflects the current greenhouse controlle
 
 ## Project shape
 
-- [../src/main.cpp](../src/main.cpp) contains the board-level runtime: initialization, sensor reads, mode changes, display updates, logging, and actuator output writes.
+- [../src/main.cpp](../src/main.cpp) now coordinates the board-level runtime: initialization order, mode changes, logging, connectivity, and actuator output writes.
+- [../include/runtime](../include/runtime) plus [../src/runtime](../src/runtime) contain the hardware-facing runtime modules for battery sensing, sensor sampling, and OLED setup.
 - [../include/ControlLogic.h](../include/ControlLogic.h) contains the shared greenhouse decision logic that can be tested on the host.
 - [../include/Settings.h](../include/Settings.h) contains user-tunable thresholds, feature toggles, and derived control-system configuration.
 - [../include/PinMap.h](../include/PinMap.h) is the hardware contract for the current ESP32-S3 target board.
@@ -96,6 +97,7 @@ The current host-side test environment also requires a working native C/C++ tool
 ## CI surfaces
 
 - [../.github/workflows/build-release-bundle.yml](../.github/workflows/build-release-bundle.yml) builds firmware, bundles docs, and can publish a release bundle.
+- The release workflow now derives the Git tag directly from [../include/Version.h](../include/Version.h) on pushes to `main` and skips release creation when that tag already exists.
 - [../.github/workflows/deploy-docs-site.yml](../.github/workflows/deploy-docs-site.yml) renders the markdown docs site for GitHub Pages.
 
 ## Good next engineering targets

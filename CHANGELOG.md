@@ -8,6 +8,14 @@ This file starts with the first explicitly documented public baseline for the re
 
 ## [Unreleased]
 
+### Added
+
+- A dedicated firmware version header at `include/Version.h`, plus boot-time OLED and serial version reporting for field verification.
+- Repository hygiene files for licensing and contribution guidance.
+- Runtime HAL modules for battery sensing, display setup, and sensor sampling under `include/runtime/` and `src/runtime/`.
+- A new SVG system block diagram for the docs set and GitHub Pages site.
+- CI-driven versioned release creation that derives Git tags from `include/Version.h` on pushes to `main`.
+
 ### Planned
 
 - Power telemetry expansion for solar voltage, current, charge state, and runtime estimation.

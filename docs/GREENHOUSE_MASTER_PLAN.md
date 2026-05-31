@@ -10,6 +10,7 @@ Historical planning material under `docs/temp/` is intentionally excluded from t
 
 Current reference diagrams:
 
+- [System block diagram](./diagrams/greenhouse-system-block-diagram.svg)
 - [5 V summer architecture](./diagrams/greenhouse-5v-summer-architecture.png)
 - [Future 5 V plus 12 V winter architecture](./diagrams/greenhouse-5v-plus-12v-winter-architecture.png)
 

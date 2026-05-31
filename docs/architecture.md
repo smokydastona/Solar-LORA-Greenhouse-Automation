@@ -13,6 +13,10 @@ The design deliberately keeps one airflow path independent:
 - direct-solar fan path: intentionally simple and independent
 - controller-backed path: buffered power, sensing, logging, actuation, and optional telemetry
 
+## System Block Diagram
+
+![Mini Greenhouse system block diagram](./diagrams/greenhouse-system-block-diagram.svg)
+
 ## Architecture Layers
 
 ### 1. Independent thermal safety layer
@@ -72,6 +76,7 @@ Not yet complete to a full off-grid fleet standard:
 
 ## Canonical Diagrams
 
+- System block diagram: [diagrams/greenhouse-system-block-diagram.svg](./diagrams/greenhouse-system-block-diagram.svg)
 - Current-state 5 V architecture: [diagrams/greenhouse-5v-summer-architecture.png](./diagrams/greenhouse-5v-summer-architecture.png)
 - Future 5 V plus 12 V architecture: [diagrams/greenhouse-5v-plus-12v-winter-architecture.png](./diagrams/greenhouse-5v-plus-12v-winter-architecture.png)
 - Board reference pinout: [diagrams/SX1262_Pinout.png](./diagrams/SX1262_Pinout.png)

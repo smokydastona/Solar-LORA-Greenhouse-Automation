@@ -10,6 +10,7 @@ These are the only greenhouse architecture diagrams that should be treated as cu
 
 | Diagram | Scope | Status | Primary companion doc |
 | --- | --- | --- | --- |
+| [greenhouse-system-block-diagram.svg](./diagrams/greenhouse-system-block-diagram.svg) | Single-page system overview showing current 5 V runtime, independent direct-solar airflow, telemetry, and the future 12 V boundary | Canonical system block diagram | [architecture.md](./architecture.md) |
 | [greenhouse-5v-summer-architecture.png](./diagrams/greenhouse-5v-summer-architecture.png) | Current first-generation 5 V controller-backed build plus independent direct-solar airflow | Canonical current-state diagram | [WIRING_5V.md](./WIRING_5V.md) |
 | [greenhouse-5v-plus-12v-winter-architecture.png](./diagrams/greenhouse-5v-plus-12v-winter-architecture.png) | Future second-generation winter system with 12 V backbone feeding a later controller interface | Canonical future-state diagram | [WIRING_12V_UPGRADE.md](./WIRING_12V_UPGRADE.md) |
 

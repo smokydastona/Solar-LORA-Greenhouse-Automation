@@ -1,0 +1,15 @@
+#pragma once
+
+#include <Adafruit_SSD1306.h>
+#include <esp_system.h>
+
+namespace GreenhouseHal {
+
+bool initDisplay(Adafruit_SSD1306 &display);
+void showBootBanner(Adafruit_SSD1306 &display,
+                    esp_reset_reason_t lastResetReason,
+                    const char *firmwareVersion,
+                    const char *firmwareCodename,
+                    const char *(*resetReasonLabel)(esp_reset_reason_t));
+
+}  // namespace GreenhouseHal

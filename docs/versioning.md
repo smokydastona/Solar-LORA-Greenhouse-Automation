@@ -16,6 +16,10 @@ Examples:
 - `0.2.0`
 - `1.0.0`
 
+The firmware version string that ships on the controller is defined in [../include/Version.h](../include/Version.h). Update that header in the same change set as any release-note or release-tag change.
+
+On pushes to `main`, CI now uses that same header as the source of truth for release tags and GitHub releases. If `include/Version.h` says `0.1.1`, the release workflow targets `v0.1.1` and skips creating a duplicate if that tag already exists.
+
 ## Pre-1.0 Rule
 
 The project is currently below `1.0.0`.
@@ -74,6 +78,8 @@ When release tags are used, prefer tags that match the version exactly:
 
 - `v0.1.0`
 - `v0.2.0`
+
+The running firmware should surface the same version on the serial boot banner and OLED boot screen so field verification matches the git tag and changelog entry.
 
 ## Reality Rule
 

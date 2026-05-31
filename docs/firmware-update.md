@@ -20,8 +20,9 @@ Use USB whenever possible for planned upgrades, recovery, or commissioning.
 4. Build with `pio run -e greenhouse_controller`.
 5. Flash with `pio run -e greenhouse_controller -t upload`.
 6. Open serial monitor at `115200` baud and confirm normal boot.
-7. Verify the OLED initializes and the expected sensors report sane values.
-8. If battery telemetry is enabled, verify the reading is still plausible after the update.
+7. Confirm the boot banner reports the expected firmware version from `include/Version.h`.
+8. Verify the OLED initializes and the expected sensors report sane values.
+9. If battery telemetry is enabled, verify the reading is still plausible after the update.
 
 ## Optional Update Method: OTA
 
@@ -42,12 +43,13 @@ Use OTA only when:
 After any firmware update, verify:
 
 1. boot completes without entering safe mode unexpectedly
-2. the display is readable
-3. override buttons still work
-4. primary air sensor data is present
-5. servo motion remains in the intended safe travel range
-6. logs still write if LittleFS is healthy
-7. MQTT still publishes if networked telemetry is enabled
+2. the serial boot banner and OLED boot screen both show the intended firmware version
+3. the display is readable
+4. override buttons still work
+5. primary air sensor data is present
+6. servo motion remains in the intended safe travel range
+7. logs still write if LittleFS is healthy
+8. MQTT still publishes if networked telemetry is enabled
 
 ## Update Boundary
 

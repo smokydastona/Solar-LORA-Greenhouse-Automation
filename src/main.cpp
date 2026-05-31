@@ -27,6 +27,10 @@
 #include "PinMap.h"
 #include "RemoteControl.h"
 #include "Settings.h"
+#include "Version.h"
+#include "runtime/BatteryHal.h"
+#include "runtime/DisplayHal.h"
+#include "runtime/SensorHal.h"
 
 namespace {
 
@@ -36,6 +40,10 @@ using GreenhouseLogic::CropProfile;
 using GreenhouseLogic::CropStatus;
 using GreenhouseLogic::GreenhouseMetrics;
 using GreenhouseLogic::SensorSnapshot;
+using GreenhouseHal::BatteryState;
+using GreenhouseHal::SensorCacheState;
+using GreenhouseHal::SensorFaultState;
+using GreenhouseHal::SensorHardwareState;
 using GreenhouseRemote::CommandAudit;
 using GreenhouseRemote::CommandStatus;
 using GreenhouseRuntime::ConfigFault;
@@ -48,16 +56,6 @@ constexpr size_t kRecentFaultCapacity = 4U;
 static_assert(kRecentFaultCapacity == Settings::DIAGNOSTICS.recentFaultCapacity,
               "Recent fault capacity must match diagnostics settings.");
 
-struct BatteryState {
-  float voltageV = 0.0F;
-  uint32_t rawMilliVolts = 0;
-  int percent = 0;
-  bool available = false;
-  bool calibrated = false;
-  bool low = false;
-  bool critical = false;
-};
-
 enum class SafeModeReason : uint8_t {
   none = 0,
   manual,
@@ -67,18 +65,6 @@ enum class SafeModeReason : uint8_t {
   configFault,
   sensorFault,
   servoProtect,
-};
-
-struct SensorFaultState {
-  uint8_t consecutiveAirFaults = 0;
-  uint32_t lastAirFaultAt = 0;
-  uint32_t lastAirRecoveryAt = 0;
-  uint32_t airReadFailures = 0;
-  uint32_t bmeReadFailures = 0;
-  uint32_t dhtReadFailures = 0;
-  uint32_t lightReadFailures = 0;
-  uint32_t waterReadFailures = 0;
-  bool airUnavailableLogged = false;
 };
 
 struct ServoProtectionState {
@@ -100,16 +86,6 @@ struct RecentFaultEntry {
   uint32_t atMs = 0;
   int32_t detail = 0;
   uint32_t bootCount = 0;
-};
-
-struct SensorCacheState {
-  float lastAirTempC = 0.0F;
-  float lastHumidityPct = 0.0F;
-  float lastWaterTempC = 0.0F;
-  float lastLightLux = 0.0F;
-  uint32_t lastAirAt = 0;
-  uint32_t lastWaterAt = 0;
-  uint32_t lastLightAt = 0;
 };
 
 const char *resetReasonLabel(esp_reset_reason_t reason) {
@@ -193,10 +169,6 @@ const char *batteryBandLabel(const BatteryState &battery) {
   return "NORMAL";
 }
 
-bool validAirReading(float tempC, float humidityPct) {
-  return !isnan(tempC) && !isnan(humidityPct) && tempC > -40.0F && tempC < 85.0F && humidityPct >= 0.0F && humidityPct <= 100.0F;
-}
-
 class Button {
  public:
   explicit Button(gpio_num_t pin) : pin_(pin) {}
@@ -237,6 +209,9 @@ class GreenhouseController {
     activeInstance_ = this;
     Serial.begin(115200);
     delay(200);
+    Serial.printf("Mini Greenhouse firmware %s (%s)\n",
+                  GreenhouseVersion::kFirmwareVersion,
+                  GreenhouseVersion::kFirmwareCodename);
     pinMode(PinMap::STATUS_LED, OUTPUT);
     digitalWrite(PinMap::STATUS_LED, HIGH);
     lastResetReason_ = esp_reset_reason();
@@ -253,6 +228,7 @@ class GreenhouseController {
     initReliability();
     initSensors();
     initDisplay();
+    showBootBanner();
     primeServoTargets();
     if (!holdsServosForInspection()) {
       initServos();
@@ -354,44 +330,23 @@ class GreenhouseController {
 
   void initSensors() {
     initBatteryMonitor();
-
-    if (Settings::SYSTEM.enableBme280) {
-      bmeReady_ = bme_.begin(Settings::BME280_I2C_ADDRESS, &Wire);
-    }
-
-    if (Settings::SYSTEM.enableDht22) {
-      dht_.begin();
-      dhtReady_ = true;
-    }
-
-    if (Settings::SYSTEM.enableBh1750) {
-      lightReady_ = lightSensor_.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, Settings::BH1750_ADDRESS, &Wire);
-    }
-
-    if (Settings::SYSTEM.enableWaterProbe) {
-      waterSensor_.begin();
-      waterReady_ = waterSensor_.getDeviceCount() > 0;
-    }
+    sensorHardware_ = GreenhouseHal::initSensors(bme_, dht_, lightSensor_, waterSensor_);
   }
 
   void initDisplay() {
-    pinMode(PinMap::OLED_VEXT, OUTPUT);
-    digitalWrite(PinMap::OLED_VEXT, LOW);
-    delay(50);
+    displayReady_ = GreenhouseHal::initDisplay(display_);
+  }
 
-    pinMode(PinMap::OLED_RESET, OUTPUT);
-    digitalWrite(PinMap::OLED_RESET, LOW);
-    delay(20);
-    digitalWrite(PinMap::OLED_RESET, HIGH);
-    delay(20);
-
-    displayReady_ = display_.begin(SSD1306_SWITCHCAPVCC, Settings::OLED_ADDRESS);
-    if (displayReady_) {
-      display_.clearDisplay();
-      display_.setTextColor(SSD1306_WHITE);
-      display_.setTextSize(1);
-      display_.display();
+  void showBootBanner() {
+    if (!displayReady_) {
+      return;
     }
+
+    GreenhouseHal::showBootBanner(display_,
+                                  lastResetReason_,
+                                  GreenhouseVersion::kFirmwareVersion,
+                                  GreenhouseVersion::kFirmwareCodename,
+                                  resetReasonLabel);
   }
 
   void primeServoTargets() {
@@ -471,12 +426,7 @@ class GreenhouseController {
   }
 
   void initBatteryMonitor() {
-    if (!Settings::BATTERY.enableVoltageMonitor) {
-      return;
-    }
-
-    pinMode(PinMap::BATTERY_ADC_CTRL, OUTPUT);
-    digitalWrite(PinMap::BATTERY_ADC_CTRL, HIGH);
+    GreenhouseHal::initBatteryMonitor();
   }
 
   void initWifi() {
@@ -570,75 +520,14 @@ class GreenhouseController {
   }
 
   SensorSnapshot readSensors(uint32_t now) {
-    SensorSnapshot result;
-    bool airValidNow = false;
-
-    if (bmeReady_) {
-      result.airTempC = bme_.readTemperature();
-      result.humidityPct = bme_.readHumidity();
-      airValidNow = validAirReading(result.airTempC, result.humidityPct);
-      if (!airValidNow && sensorFaults_.bmeReadFailures < UINT32_MAX) {
-        ++sensorFaults_.bmeReadFailures;
-      }
-    }
-
-    if (!airValidNow && dhtReady_) {
-      result.airTempC = dht_.readTemperature();
-      result.humidityPct = dht_.readHumidity();
-      airValidNow = validAirReading(result.airTempC, result.humidityPct);
-      if (!airValidNow && sensorFaults_.dhtReadFailures < UINT32_MAX) {
-        ++sensorFaults_.dhtReadFailures;
-      }
-    }
-
-    if (!airValidNow && (bmeReady_ || dhtReady_) && sensorFaults_.airReadFailures < UINT32_MAX) {
-      ++sensorFaults_.airReadFailures;
-    }
-
-    if (airValidNow) {
-      sensorCache_.lastAirTempC = result.airTempC;
-      sensorCache_.lastHumidityPct = result.humidityPct;
-      sensorCache_.lastAirAt = now;
-    }
-    result.airAgeMs = GreenhouseRuntime::sampleAgeMs(now, sensorCache_.lastAirAt);
-    if (GreenhouseRuntime::sampleFresh(now, sensorCache_.lastAirAt, Settings::RELIABILITY.airDataMaxAgeMs)) {
-      result.airTempC = sensorCache_.lastAirTempC;
-      result.humidityPct = sensorCache_.lastHumidityPct;
-      result.airAvailable = true;
-    }
-
-    if (lightReady_) {
-      result.lightLux = lightSensor_.readLightLevel();
-      if (result.lightLux >= 0.0F && result.lightLux < 200000.0F) {
-        sensorCache_.lastLightLux = result.lightLux;
-        sensorCache_.lastLightAt = now;
-      } else if (sensorFaults_.lightReadFailures < UINT32_MAX) {
-        ++sensorFaults_.lightReadFailures;
-      }
-    }
-    result.lightAgeMs = GreenhouseRuntime::sampleAgeMs(now, sensorCache_.lastLightAt);
-    if (GreenhouseRuntime::sampleFresh(now, sensorCache_.lastLightAt, Settings::RELIABILITY.lightDataMaxAgeMs)) {
-      result.lightLux = sensorCache_.lastLightLux;
-      result.lightAvailable = true;
-    }
-
-    if (waterReady_) {
-      waterSensor_.requestTemperatures();
-      result.waterTempC = waterSensor_.getTempCByIndex(0);
-      if (result.waterTempC > -100.0F && result.waterTempC < 125.0F) {
-        sensorCache_.lastWaterTempC = result.waterTempC;
-        sensorCache_.lastWaterAt = now;
-      } else if (sensorFaults_.waterReadFailures < UINT32_MAX) {
-        ++sensorFaults_.waterReadFailures;
-      }
-    }
-    result.waterAgeMs = GreenhouseRuntime::sampleAgeMs(now, sensorCache_.lastWaterAt);
-    if (GreenhouseRuntime::sampleFresh(now, sensorCache_.lastWaterAt, Settings::RELIABILITY.waterDataMaxAgeMs)) {
-      result.waterTempC = sensorCache_.lastWaterTempC;
-      result.waterAvailable = true;
-    }
-
-    return result;
+    return GreenhouseHal::readSensors(now,
+                                      bme_,
+                                      dht_,
+                                      lightSensor_,
+                                      waterSensor_,
+                                      sensorHardware_,
+                                      sensorFaults_,
+                                      sensorCache_);
   }
 
   void applyConfigurationSafety() {
@@ -917,11 +806,12 @@ class GreenhouseController {
     display_.setCursor(0, 0);
     if (safeMode_) {
       display_.printf("SAFE MODE\n");
+      display_.printf("FW:%s\n", GreenhouseVersion::kFirmwareVersion);
       display_.printf("Reason:%s\n", safeModeReasonLabel(safeModeReason_));
       display_.printf("Reset:%s\n", resetReasonLabel(lastResetReason_));
-      display_.printf("Boots:%u Fail:%u\n", static_cast<unsigned>(bootCount_), static_cast<unsigned>(bootFailures_));
       display_.printf("Batt:%s\n", batteryBuffer);
       display_.printf("Air: %s\n", airBuffer);
+      display_.printf("Boot:%u/%u\n", static_cast<unsigned>(bootCount_), static_cast<unsigned>(bootFailures_));
       display_.printf("MODE=resume");
     } else if (((millis() / Settings::LOGGING.displayIntervalMs) % 3U) == 0U) {
       display_.printf("State:%s\n", GreenhouseRuntime::controllerStateLabel(controllerState_));
@@ -949,6 +839,7 @@ class GreenhouseController {
       display_.printf("Batt: %s\n", batteryBuffer);
       display_.printf("Health:%d %s", computeHealthScore(), statusBuffer);
     } else {
+      display_.printf("FW:%s\n", GreenhouseVersion::kFirmwareVersion);
       display_.printf("Diag:%s\n", statusBuffer);
       display_.printf("Power:%s\n", batteryBandLabel(battery_));
       display_.printf("Raw:%lumV\n", static_cast<unsigned long>(battery_.rawMilliVolts));
@@ -1256,47 +1147,7 @@ class GreenhouseController {
   }
 
   BatteryState readBatteryState() {
-    BatteryState state{};
-    const int pin = Settings::BATTERY.analogPin >= 0 ? Settings::BATTERY.analogPin : PinMap::BATTERY_VOLTAGE;
-    if (!Settings::BATTERY.enableVoltageMonitor || pin < 0) {
-      return state;
-    }
-
-    batteryAdcEnable();
-    uint32_t totalMilliVolts = 0;
-    for (uint8_t index = 0; index < Settings::BATTERY.samplesPerRead; ++index) {
-      totalMilliVolts += static_cast<uint32_t>(analogReadMilliVolts(pin));
-    }
-    batteryAdcDisable();
-
-    const float measuredV = (static_cast<float>(totalMilliVolts) /
-                             static_cast<float>(Settings::BATTERY.samplesPerRead)) /
-                            1000.0F;
-    state.rawMilliVolts = totalMilliVolts / static_cast<uint32_t>(Settings::BATTERY.samplesPerRead);
-    state.voltageV = (measuredV * Settings::BATTERY.dividerRatio) + Settings::BATTERY.calibrationOffsetVolts;
-    state.available = state.voltageV > 0.1F;
-    if (!state.available) {
-      return state;
-    }
-
-    state.calibrated = Settings::BATTERY.calibrationVerified;
-
-    const float percent = ((state.voltageV - Settings::BATTERY.emptyVoltage) /
-                           (Settings::BATTERY.fullVoltage - Settings::BATTERY.emptyVoltage)) * 100.0F;
-    const float clamped = percent < 0.0F ? 0.0F : (percent > 100.0F ? 100.0F : percent);
-    state.percent = static_cast<int>(clamped + 0.5F);
-    state.low = state.voltageV <= Settings::BATTERY.lowVoltage;
-    state.critical = state.voltageV <= Settings::BATTERY.criticalVoltage;
-    return state;
-  }
-
-  void batteryAdcEnable() {
-    digitalWrite(PinMap::BATTERY_ADC_CTRL, LOW);
-    delay(10);
-  }
-
-  void batteryAdcDisable() {
-    digitalWrite(PinMap::BATTERY_ADC_CTRL, HIGH);
+    return GreenhouseHal::readBatteryState();
   }
 
   int computeHealthScore() const {
@@ -1671,10 +1522,7 @@ class GreenhouseController {
   ControllerState controllerState_ = ControllerState::automatic;
   PowerBudget powerBudget_{};
 
-  bool bmeReady_ = false;
-  bool dhtReady_ = false;
-  bool lightReady_ = false;
-  bool waterReady_ = false;
+  SensorHardwareState sensorHardware_{};
   bool displayReady_ = false;
   bool filesystemReady_ = false;
   bool otaReady_ = false;

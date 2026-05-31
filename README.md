@@ -100,6 +100,7 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 
 - PlatformIO firmware for the ESP32-S3 controller in [platformio.ini](./platformio.ini) and [src/main.cpp](./src/main.cpp)
 - Pin mapping and configurable thresholds in [include/PinMap.h](./include/PinMap.h) and [include/Settings.h](./include/Settings.h)
+- Firmware version source of truth in [include/Version.h](./include/Version.h)
 - The consolidated greenhouse master plan in [docs/GREENHOUSE_MASTER_PLAN.md](./docs/GREENHOUSE_MASTER_PLAN.md)
 - Canonical diagram and architecture navigation in [docs/ARCHITECTURE_INDEX.md](./docs/ARCHITECTURE_INDEX.md)
 - Step-by-step first-generation build instructions in [docs/BUILD_GUIDE_5V.md](./docs/BUILD_GUIDE_5V.md)
@@ -136,6 +137,7 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - OLED status display for climate values and actuator states
 - CSV logging to LittleFS
 - Optional Wi-Fi and OTA update support when Wi-Fi credentials are configured
+- Boot-time firmware version banner on serial and OLED so field updates can be verified without guessing the flashed image
 - Preferences-backed boot reason logging and boot-failure tracking
 - Safe-mode boot after repeated failed boots or by holding both override buttons during startup
 - Safe-mode entry on repeated air-sensor faults, brownout recovery, and unfinished-servo recovery boots
