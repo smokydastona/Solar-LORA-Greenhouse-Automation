@@ -49,6 +49,13 @@ This workspace has previously been edited in environments where PlatformIO was n
 - Wi-Fi, OTA, LoRa, and time synchronization
 - GPIO output writes and boot-time initialization
 
+## Diagnostics conventions
+
+- Keep diagnostic event codes explicit and reuse the labels in [../include/ControllerRuntime.h](../include/ControllerRuntime.h) instead of inventing ad hoc strings in multiple places.
+- Prefer counters and persisted recent-event history over verbose continuous logging on the controller.
+- When telemetry changes, keep the MQTT JSON contract, CSV log headers, and troubleshooting docs in sync in the same change set.
+- If a diagnostic signal is rate-limited or edge-triggered, document that behavior in the telemetry contract instead of implying every transient is preserved.
+
 ## Change impact checklist
 
 ### If you change pins
@@ -83,6 +90,8 @@ This workspace has previously been edited in environments where PlatformIO was n
 - build the firmware locally or in CI
 - run the control logic tests locally or in CI
 - if behavior changes affect commissioning, update the operator docs before finishing the change
+
+The current host-side test environment also requires a working native C/C++ toolchain. On Windows that means `gcc` and `g++` must be available for `pio test -e control_logic_native` to succeed.
 
 ## CI surfaces
 

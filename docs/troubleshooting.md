@@ -51,6 +51,13 @@ These answers separate a controller problem from a greenhouse-wide power problem
 
 ## Sensors show `N/A`
 
+When the controller still boots but telemetry looks degraded, check the diagnostics block in the retained MQTT state payload and the newest CSV rows first:
+
+1. `diagnostics.recent_fault.code`
+2. `diagnostics.sensor_errors.*`
+3. `lora.queue_warning_active` and `lora.max_queue_depth`
+4. `servo.blocked_commands`, `servo.last_move_ms`, and `servo.longest_move_ms`
+
 ### Air sensor missing
 
 Likely causes:
@@ -107,6 +114,8 @@ Checks:
 3. Verify linkage direction and neutral position before increasing travel.
 4. Upgrade to MG90S-class servos if the vents are too heavy for SG90 units.
 
+If the controller keeps rejecting vent moves while outputs otherwise look healthy, inspect `diagnostics.servo.blocked_commands`. A rising counter means the firmware is still inside the configured motion/cooldown window and is intentionally refusing new move requests.
+
 ## Vents or fans behave unexpectedly in `AUTO`
 
 ### Likely causes
@@ -152,6 +161,8 @@ The firmware no longer auto-formats LittleFS on mount failure. That is intention
 1. Inspect serial output for the mount-failure message.
 2. Repair or deliberately reinitialize storage during service.
 3. Do not assume missing logs mean the greenhouse was idle.
+
+The climate CSV now also carries diagnostic columns for LoRa queue warnings, sensor read failures, servo timing, and the most recent persisted fault code/detail. Use those before reflashing if you are trying to reconstruct an intermittent failure.
 
 ## Power bank drains too fast
 

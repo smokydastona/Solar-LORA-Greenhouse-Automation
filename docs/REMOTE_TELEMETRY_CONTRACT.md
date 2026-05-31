@@ -12,7 +12,8 @@ It exists so dashboards, Home Assistant, and any future LoRa or cloud bridge can
 - State publishing: retained JSON payloads
 - Availability: retained `online` or `offline` topic
 - Home Assistant integration: MQTT discovery payloads published automatically on broker connection when enabled
-- LoRa status exposure: session id plus queue depth, sent, acknowledged, ACK timeout, dropped, duplicate, invalid, RSSI, SNR, and last-error counters are included in the JSON state payload
+- LoRa status exposure: session id plus queue depth, queue-warning state, sent, acknowledged, ACK timeout, dropped, duplicate, invalid, RSSI, SNR, and last-error counters are included in the JSON state payload
+- Diagnostics exposure: recent persisted fault history, per-sensor read-error counters, and servo timing/block counters are included in the JSON state payload and climate CSV log
 
 ## Configuration surface
 
@@ -33,7 +34,9 @@ Relevant fields:
 - `publishIntervalMs`
 - `enableInboundModeCommands`
 
-LoRa queue configuration lives beside it in [../include/Settings.h](../include/Settings.h) under `Settings::LORA`.
+LoRa transport configuration lives beside it in [../include/Settings.h](../include/Settings.h) under `Settings::LORA`.
+
+Diagnostics thresholds live in [../include/Settings.h](../include/Settings.h) under `Settings::DIAGNOSTICS`.
 
 ## Topics
 
@@ -105,6 +108,27 @@ The current state topic publishes a retained JSON document shaped like this:
   "health": {
     "score": 100
   },
+  "diagnostics": {
+    "recent_fault_count": 1,
+    "recent_fault": {
+      "code": "LORA_QUEUE_WARN",
+      "detail": 6,
+      "at_ms": 93021,
+      "boot_count": 14
+    },
+    "sensor_errors": {
+      "air": 0,
+      "bme": 0,
+      "dht": 0,
+      "light": 2,
+      "water": 0
+    },
+    "servo": {
+      "blocked_commands": 0,
+      "last_move_ms": 1200,
+      "longest_move_ms": 1200
+    }
+  },
   "actuators": {
     "top_open": false,
     "bottom_open": false,
@@ -135,10 +159,16 @@ The current state topic publishes a retained JSON document shaped like this:
   "lora": {
     "session_id": 123456789,
     "queue_depth": 0,
+    "queue_warning_active": false,
+    "queue_warnings": 0,
+    "max_queue_depth": 1,
+    "last_queue_warning_at_ms": 0,
     "sent": 0,
     "acknowledged": 0,
     "ack_timeouts": 0,
     "dropped": 0,
+    "last_dropped_sequence": 0,
+    "last_dropped_at_ms": 0,
     "duplicate_inbound": 0,
     "invalid_inbound": 0,
     "last_rssi_dbm": -77,
@@ -205,9 +235,31 @@ Interpret them like this:
 
 ### `health`
 
-`score` is a simple controller-health heuristic based on sensor availability, filesystem readiness, safe mode, battery state, and expected connectivity.
+`score` is a simple controller-health heuristic based on sensor availability, filesystem readiness, safe mode, battery state, expected connectivity, and whether the LoRa queue is under pressure.
 
 It is intended as an operator summary, not a formal reliability metric.
+
+### `diagnostics`
+
+- `recent_fault_count`: number of persisted recent diagnostic events currently retained in the controller ringbuffer
+- `recent_fault.code`: one of `AIR_UNAVAILABLE`, `AIR_RECOVERED`, `LIGHT_READ_FAIL`, `WATER_READ_FAIL`, `LORA_QUEUE_WARN`, `LORA_DROP`, `SERVO_BLOCKED`, `SERVO_SLOW`, or `SAFE_MODE`
+- `recent_fault.detail`: integer detail field associated with the most recent event, such as queue depth, fault count, safe-mode reason enum, or servo move duration in milliseconds
+- `recent_fault.at_ms`: controller `millis()` when that event was recorded
+- `recent_fault.boot_count`: boot count associated with the recorded event
+- `sensor_errors`: cumulative read-failure counters for the active sensor paths in the current boot session
+- `servo.blocked_commands`: count of move requests rejected because the servos were already moving or still cooling down
+- `servo.last_move_ms` and `servo.longest_move_ms`: servo drive timing diagnostics captured from the firmware-side protection window
+
+These diagnostics are intended for field troubleshooting and commissioning. They are not a substitute for physical inspection when a vent or sensor branch is behaving unsafely.
+
+### `lora`
+
+- `queue_warning_active`: `true` when the queued frame count is at or above the configured warning threshold
+- `queue_warnings`: number of times the queue crossed into warning state during the current boot session
+- `max_queue_depth`: deepest observed queue depth during the current boot session
+- `last_queue_warning_at_ms`: `millis()` timestamp of the most recent warning-state transition
+- `last_dropped_sequence`: most recent sequence number dropped because the queue was full or retries were exhausted
+- `last_dropped_at_ms`: `millis()` timestamp of that most recent dropped frame
 
 ### `power_budget`
 
@@ -251,6 +303,8 @@ When discovery is enabled, the firmware currently publishes discovery for:
 - an MQTT/Home Assistant select entity for remote control mode selection
 
 The current integration accepts only remote mode changes. It does not accept direct actuator commands.
+
+The new diagnostics fields are currently carried only in the retained JSON state payload and the local CSV logs. They are not yet published as dedicated Home Assistant discovery entities.
 
 ## LoRa on-air contract
 

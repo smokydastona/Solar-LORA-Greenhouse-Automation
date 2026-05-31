@@ -45,6 +45,8 @@ using GreenhouseRuntime::PowerBudget;
 
 constexpr const char *kCommandLogPath = "/command_log.csv";
 constexpr size_t kRecentFaultCapacity = 4U;
+static_assert(kRecentFaultCapacity == Settings::DIAGNOSTICS.recentFaultCapacity,
+              "Recent fault capacity must match diagnostics settings.");
 
 struct BatteryState {
   float voltageV = 0.0F;
@@ -406,6 +408,7 @@ class GreenhouseController {
     topServo_.write(servoProtection_.topTargetDegrees);
     bottomServo_.write(servoProtection_.bottomTargetDegrees);
     servoProtection_.motionActive = true;
+    servoProtection_.lastMoveStartedAt = millis();
     servoProtection_.motionEndsAt = millis() + Settings::RELIABILITY.servoDriveWindowMs;
     servoProtection_.cooldownEndsAt = servoProtection_.motionEndsAt + Settings::RELIABILITY.servoCooldownMs;
     preferences_.putBool("servo_pending", true);
@@ -515,7 +518,8 @@ class GreenhouseController {
                     Settings::LORA.nodeId,
                     Settings::LORA.maxRetries,
                     Settings::LORA.retryBackoffMs,
-                    bootCount_ ^ static_cast<uint32_t>(lastResetReason_));
+                    bootCount_ ^ static_cast<uint32_t>(lastResetReason_),
+                    Settings::DIAGNOSTICS.loraQueueWarningDepth);
   }
 
   void handleMqttMessage(char *topic, uint8_t *payload, unsigned int length) {
@@ -666,6 +670,17 @@ class GreenhouseController {
   }
 
   void evaluateSensorFaults(uint32_t now) {
+    if (sensorFaults_.lightReadFailures > recordedLightFailures_) {
+      recordDiagnosticEvent(DiagnosticCode::lightSensorReadFailure,
+                            static_cast<int32_t>(sensorFaults_.lightReadFailures));
+      recordedLightFailures_ = sensorFaults_.lightReadFailures;
+    }
+    if (sensorFaults_.waterReadFailures > recordedWaterFailures_) {
+      recordDiagnosticEvent(DiagnosticCode::waterSensorReadFailure,
+                            static_cast<int32_t>(sensorFaults_.waterReadFailures));
+      recordedWaterFailures_ = sensorFaults_.waterReadFailures;
+    }
+
     if (snapshot_.airAvailable) {
       if (sensorFaults_.lastAirFaultAt > 0 &&
           now - sensorFaults_.lastAirFaultAt >= Settings::RELIABILITY.sensorFaultRecoveryDelayMs) {
@@ -688,16 +703,6 @@ class GreenhouseController {
       recordDiagnosticEvent(DiagnosticCode::airSensorUnavailable,
                             static_cast<int32_t>(sensorFaults_.consecutiveAirFaults));
       sensorFaults_.airUnavailableLogged = true;
-    }
-    if (sensorFaults_.lightReadFailures > recordedLightFailures_) {
-      recordDiagnosticEvent(DiagnosticCode::lightSensorReadFailure,
-                            static_cast<int32_t>(sensorFaults_.lightReadFailures));
-      recordedLightFailures_ = sensorFaults_.lightReadFailures;
-    }
-    if (sensorFaults_.waterReadFailures > recordedWaterFailures_) {
-      recordDiagnosticEvent(DiagnosticCode::waterSensorReadFailure,
-                            static_cast<int32_t>(sensorFaults_.waterReadFailures));
-      recordedWaterFailures_ = sensorFaults_.waterReadFailures;
     }
 
     if (!safeMode_ &&
@@ -1503,9 +1508,10 @@ class GreenhouseController {
 
   void buildTelemetryPayload(char *payload, size_t payloadSize) {
     const CropProfile &profile = GreenhouseLogic::cropProfile(Settings::CROP.profile);
+    const RecentFaultEntry latestFault = latestRecentFault();
     snprintf(payload,
              payloadSize,
-             "{\"mode\":\"%s\",\"controller_state\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"age_ms\":%lu,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"calibrated\":%s,\"sensor\":\"VBAT_Read\",\"adc_ctrl_pin\":%d,\"raw_mv\":%lu,\"voltage_v\":%.2f,\"percent\":%d,\"band\":\"%s\",\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"power_budget\":{\"servo_moves\":%s,\"vent_fans\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"commands\":{\"mode\":{\"enabled\":%s,\"requested\":\"%s\",\"status\":\"%s\",\"applied\":\"%s\",\"received_at_ms\":%lu}},\"lora\":{\"session_id\":%lu,\"queue_depth\":%u,\"sent\":%lu,\"acknowledged\":%lu,\"ack_timeouts\":%lu,\"dropped\":%lu,\"duplicate_inbound\":%lu,\"invalid_inbound\":%lu,\"last_rssi_dbm\":%d,\"last_snr_db\":%.2f,\"last_error_code\":%d},\"uptime_ms\":%lu}",
+             "{\"mode\":\"%s\",\"controller_state\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"age_ms\":%lu,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"calibrated\":%s,\"sensor\":\"VBAT_Read\",\"adc_ctrl_pin\":%d,\"raw_mv\":%lu,\"voltage_v\":%.2f,\"percent\":%d,\"band\":\"%s\",\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"diagnostics\":{\"recent_fault_count\":%u,\"recent_fault\":{\"code\":\"%s\",\"detail\":%ld,\"at_ms\":%lu,\"boot_count\":%lu},\"sensor_errors\":{\"air\":%lu,\"bme\":%lu,\"dht\":%lu,\"light\":%lu,\"water\":%lu},\"servo\":{\"blocked_commands\":%lu,\"last_move_ms\":%lu,\"longest_move_ms\":%lu}},\"power_budget\":{\"servo_moves\":%s,\"vent_fans\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"commands\":{\"mode\":{\"enabled\":%s,\"requested\":\"%s\",\"status\":\"%s\",\"applied\":\"%s\",\"received_at_ms\":%lu}},\"lora\":{\"session_id\":%lu,\"queue_depth\":%u,\"queue_warning_active\":%s,\"queue_warnings\":%lu,\"max_queue_depth\":%lu,\"last_queue_warning_at_ms\":%lu,\"sent\":%lu,\"acknowledged\":%lu,\"ack_timeouts\":%lu,\"dropped\":%lu,\"last_dropped_sequence\":%lu,\"last_dropped_at_ms\":%lu,\"duplicate_inbound\":%lu,\"invalid_inbound\":%lu,\"last_rssi_dbm\":%d,\"last_snr_db\":%.2f,\"last_error_code\":%d},\"uptime_ms\":%lu}",
              modeLabel(),
              GreenhouseRuntime::controllerStateLabel(controllerState_),
              safeMode_ ? "true" : "false",
@@ -1537,6 +1543,19 @@ class GreenhouseController {
              battery_.low ? "true" : "false",
              battery_.critical ? "true" : "false",
              computeHealthScore(),
+             static_cast<unsigned>(recentFaultCount_),
+             GreenhouseRuntime::diagnosticCodeLabel(latestFault.code),
+             static_cast<long>(latestFault.detail),
+             static_cast<unsigned long>(latestFault.atMs),
+             static_cast<unsigned long>(latestFault.bootCount),
+             static_cast<unsigned long>(sensorFaults_.airReadFailures),
+             static_cast<unsigned long>(sensorFaults_.bmeReadFailures),
+             static_cast<unsigned long>(sensorFaults_.dhtReadFailures),
+             static_cast<unsigned long>(sensorFaults_.lightReadFailures),
+             static_cast<unsigned long>(sensorFaults_.waterReadFailures),
+             static_cast<unsigned long>(servoProtection_.commandBlockedCount),
+             static_cast<unsigned long>(servoProtection_.lastMoveDurationMs),
+             static_cast<unsigned long>(servoProtection_.longestMoveDurationMs),
              powerBudget_.allowServoMoves ? "true" : "false",
              powerBudget_.allowVentFans ? "true" : "false",
              powerBudget_.allowDefogger ? "true" : "false",
@@ -1561,10 +1580,16 @@ class GreenhouseController {
              static_cast<unsigned long>(lastCommandAudit_.receivedAtMs),
              static_cast<unsigned long>(loraLink_.stats().sessionId),
              static_cast<unsigned>(loraLink_.stats().queueDepth),
+             loraLink_.stats().queueWarningActive ? "true" : "false",
+             static_cast<unsigned long>(loraLink_.stats().queueWarningCount),
+             static_cast<unsigned long>(loraLink_.stats().maxQueueDepthObserved),
+             static_cast<unsigned long>(loraLink_.stats().lastQueueWarningAtMs),
              static_cast<unsigned long>(loraLink_.stats().sentFrames),
              static_cast<unsigned long>(loraLink_.stats().acknowledgedFrames),
              static_cast<unsigned long>(loraLink_.stats().ackTimeouts),
              static_cast<unsigned long>(loraLink_.stats().droppedFrames),
+             static_cast<unsigned long>(loraLink_.stats().lastDroppedSequence),
+             static_cast<unsigned long>(loraLink_.stats().lastDroppedAtMs),
              static_cast<unsigned long>(loraLink_.stats().duplicateInboundFrames),
              static_cast<unsigned long>(loraLink_.stats().invalidInboundFrames),
              loraLink_.stats().lastRssi,
@@ -1574,7 +1599,7 @@ class GreenhouseController {
   }
 
   void publishTelemetry(uint32_t now) {
-    char payload[1400];
+    char payload[2200];
     buildTelemetryPayload(payload, sizeof(payload));
 
     if (mqttClient_.connected()) {
@@ -1666,6 +1691,14 @@ class GreenhouseController {
   uint8_t bootFailures_ = 0;
   SensorFaultState sensorFaults_{};
   ServoProtectionState servoProtection_{};
+  RecentFaultEntry recentFaults_[kRecentFaultCapacity]{};
+  uint8_t recentFaultHead_ = 0;
+  uint8_t recentFaultCount_ = 0;
+  uint32_t recordedLightFailures_ = 0;
+  uint32_t recordedWaterFailures_ = 0;
+  uint32_t recordedQueueWarningCount_ = 0;
+  uint32_t recordedDroppedFrames_ = 0;
+  uint32_t lastServoBlockedEventAt_ = 0;
 
   uint32_t lastControlAt_ = 0;
   uint32_t lastDisplayAt_ = 0;

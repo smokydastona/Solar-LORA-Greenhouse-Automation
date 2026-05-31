@@ -12,7 +12,7 @@ The current implemented integration surface is MQTT over Wi-Fi with Home Assista
 - retained MQTT mode-command result topic
 - Home Assistant MQTT discovery payloads
 - safe inbound MQTT mode control accepting only `AUTO`, `OPEN`, and `CLOSED`
-- structured JSON state including climate, battery, health, actuator, and connectivity fields
+- structured JSON state including climate, battery, health, diagnostics, actuator, and connectivity fields
 
 ## Current Topic Model
 
@@ -37,10 +37,11 @@ The published state includes:
 - greenhouse metrics such as VPD and dew point
 - battery status
 - controller health score
+- recent persisted diagnostic event, per-sensor error counters, and servo timing diagnostics
 - actuator state
 - connectivity and storage status
 - last remote command status
-- LoRa ACK and signal diagnostics
+- LoRa ACK, queue-pressure, drop, and signal diagnostics
 - uptime
 
 ## Integrations Status
