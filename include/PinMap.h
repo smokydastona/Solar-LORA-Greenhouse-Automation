@@ -3,6 +3,14 @@
 #include <Arduino.h>
 
 namespace PinMap {
+constexpr gpio_num_t LORA_NSS = GPIO_NUM_8;
+constexpr gpio_num_t LORA_SCK = GPIO_NUM_9;
+constexpr gpio_num_t LORA_MOSI = GPIO_NUM_10;
+constexpr gpio_num_t LORA_MISO = GPIO_NUM_11;
+constexpr gpio_num_t LORA_RESET = GPIO_NUM_12;
+constexpr gpio_num_t LORA_BUSY = GPIO_NUM_13;
+constexpr gpio_num_t LORA_DIO1 = GPIO_NUM_14;
+
 constexpr gpio_num_t I2C_SDA = GPIO_NUM_17;
 constexpr gpio_num_t I2C_SCL = GPIO_NUM_18;
 constexpr gpio_num_t OLED_RESET = GPIO_NUM_21;

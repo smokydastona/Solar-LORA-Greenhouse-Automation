@@ -15,7 +15,7 @@ It is not a duplicate of [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md). T
 ### Battery telemetry is voltage-only today
 
 - The board now reads battery voltage through the onboard battery-read path.
-- The value still needs meter verification and the firmware now exposes whether that calibration has been explicitly verified.
+- The value still needs meter verification and the firmware now exposes whether that calibration has been explicitly verified, along with raw millivolts and an operator-facing battery band.
 - Solar current, charge state, daily energy harvest, and runtime estimation are not yet live firmware features.
 
 ### OTA is convenience-only, not a field-proof update path
@@ -24,12 +24,18 @@ It is not a duplicate of [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md). T
 - USB flashing remains the guaranteed recovery and service path.
 - A rollback-capable OTA strategy is not yet claimed.
 
-### LoRa contract exists, but the radio backend is still unfinished
+### LoRa backend exists, but field commissioning is still unfinished
 
 - The target board includes LoRa hardware.
-- The firmware now includes a compact payload format plus queue and retry scaffolding for LoRa telemetry.
+- The firmware now includes a live RadioLib-backed SX1262 transport with queue retries and matching ACKs for raw LoRa telemetry.
 - The active first-generation implementation still uses local control and optional Wi-Fi MQTT telemetry for the real deployed path.
-- Do not assume there is already a completed SX1262 transport driver, verified radio commissioning flow, or link-quality layer in this repo.
+- Do not assume LoRa is field-ready until you validate legal regional frequency choice, receiver interoperability, and real greenhouse link quality on your actual node pair.
+
+### Remote MQTT mode control is intentionally narrow
+
+- The firmware now accepts only `AUTO`, `OPEN`, and `CLOSED` over the dedicated MQTT mode-command topic.
+- Safe mode still requires physical recovery. Remote mode commands are rejected while the controller is in safe mode.
+- Direct remote actuator commands are intentionally not part of the current safety posture.
 
 ### The 12 V winter architecture is documented, not deployed
 

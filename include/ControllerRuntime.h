@@ -41,6 +41,19 @@ enum class ConfigFault : uint8_t {
   loraPolicy,
 };
 
+enum class DiagnosticCode : uint8_t {
+  none = 0,
+  airSensorUnavailable,
+  airSensorRecovered,
+  lightSensorReadFailure,
+  waterSensorReadFailure,
+  loraQueueWarning,
+  loraFrameDropped,
+  servoCommandBlocked,
+  servoMoveSlow,
+  safeModeEntered,
+};
+
 struct ValidationInput {
   GreenhouseLogic::ClimateConfig climate{};
   SensorFreshnessPolicy freshness{};
@@ -99,6 +112,32 @@ inline const char *configFaultLabel(ConfigFault fault) {
       return "FRESHNESS";
     case ConfigFault::loraPolicy:
       return "LORA";
+  }
+  return "UNKNOWN";
+}
+
+inline const char *diagnosticCodeLabel(DiagnosticCode code) {
+  switch (code) {
+    case DiagnosticCode::none:
+      return "NONE";
+    case DiagnosticCode::airSensorUnavailable:
+      return "AIR_UNAVAILABLE";
+    case DiagnosticCode::airSensorRecovered:
+      return "AIR_RECOVERED";
+    case DiagnosticCode::lightSensorReadFailure:
+      return "LIGHT_READ_FAIL";
+    case DiagnosticCode::waterSensorReadFailure:
+      return "WATER_READ_FAIL";
+    case DiagnosticCode::loraQueueWarning:
+      return "LORA_QUEUE_WARN";
+    case DiagnosticCode::loraFrameDropped:
+      return "LORA_DROP";
+    case DiagnosticCode::servoCommandBlocked:
+      return "SERVO_BLOCKED";
+    case DiagnosticCode::servoMoveSlow:
+      return "SERVO_SLOW";
+    case DiagnosticCode::safeModeEntered:
+      return "SAFE_MODE";
   }
   return "UNKNOWN";
 }

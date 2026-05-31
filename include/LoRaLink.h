@@ -8,6 +8,8 @@ namespace GreenhouseLoRa {
 
 constexpr size_t kNodeIdSize = 24;
 constexpr size_t kPayloadSize = 192;
+constexpr size_t kWirePacketSize = 320;
+constexpr size_t kAckPacketSize = 96;
 constexpr size_t kQueueCapacity = 8;
 constexpr size_t kRecentSequenceWindow = 8;
 
@@ -27,19 +29,30 @@ struct LinkStats {
   bool enabled = false;
   bool backendReady = false;
   bool backendConfigured = false;
+  bool queueWarningActive = false;
   uint32_t enqueuedFrames = 0;
   uint32_t sentFrames = 0;
+  uint32_t acknowledgedFrames = 0;
+  uint32_t ackTimeouts = 0;
   uint32_t droppedFrames = 0;
   uint32_t failedSendAttempts = 0;
   uint32_t duplicateInboundFrames = 0;
   uint32_t invalidInboundFrames = 0;
+  uint32_t queueWarningCount = 0;
+  uint32_t maxQueueDepthObserved = 0;
   uint32_t lastAcceptedSequence = 0;
   uint32_t lastSequence = 0;
   uint32_t sessionId = 0;
+  uint32_t lastTransmitAtMs = 0;
+  uint32_t lastAckAtMs = 0;
+  uint32_t lastQueueWarningAtMs = 0;
+  uint32_t lastDroppedAtMs = 0;
+  uint32_t lastDroppedSequence = 0;
   uint8_t queueDepth = 0;
   int lastRssi = 0;
   float lastSnr = 0.0F;
   bool signalAvailable = false;
+  int16_t lastErrorCode = 0;
 };
 
 struct SequenceWindowEntry {
@@ -71,6 +84,92 @@ inline uint32_t deriveSessionId(const char *nodeId, uint32_t seed) {
     hash *= 16777619UL;
   }
   return hash == 0U ? 1U : hash;
+}
+
+inline int buildWireTelemetryPacket(char *buffer, size_t bufferSize, const TelemetryFrame &frame) {
+  return snprintf(buffer,
+                  bufferSize,
+                  "T|%lu|%lu|%lu|%u|%s|%s",
+                  static_cast<unsigned long>(frame.sessionId),
+                  static_cast<unsigned long>(frame.sequence),
+                  static_cast<unsigned long>(frame.crc32),
+                  frame.requireAck ? 1U : 0U,
+                  frame.nodeId,
+                  frame.payload);
+}
+
+inline int buildAckPacket(char *buffer, size_t bufferSize, uint32_t sessionId, uint32_t sequence, uint32_t payloadCrc32) {
+  return snprintf(buffer,
+                  bufferSize,
+                  "A|%lu|%lu|%lu",
+                  static_cast<unsigned long>(sessionId),
+                  static_cast<unsigned long>(sequence),
+                  static_cast<unsigned long>(payloadCrc32));
+}
+
+inline bool parseWireTelemetryPacket(const char *packet,
+                                     uint32_t &sessionId,
+                                     uint32_t &sequence,
+                                     uint32_t &payloadCrc32,
+                                     bool &requireAck,
+                                     char *nodeId,
+                                     size_t nodeIdSize,
+                                     char *payload,
+                                     size_t payloadSize) {
+  if (packet == nullptr || nodeId == nullptr || payload == nullptr) {
+    return false;
+  }
+
+  unsigned long parsedSessionId = 0;
+  unsigned long parsedSequence = 0;
+  unsigned long parsedCrc32 = 0;
+  unsigned parsedRequireAck = 0;
+  char parsedNodeId[kNodeIdSize]{};
+  char parsedPayload[kPayloadSize]{};
+  const int parsed = sscanf(packet,
+                            "T|%lu|%lu|%lu|%u|%23[^|]|%191[^\n]",
+                            &parsedSessionId,
+                            &parsedSequence,
+                            &parsedCrc32,
+                            &parsedRequireAck,
+                            parsedNodeId,
+                            parsedPayload);
+  if (parsed != 6) {
+    return false;
+  }
+
+  sessionId = static_cast<uint32_t>(parsedSessionId);
+  sequence = static_cast<uint32_t>(parsedSequence);
+  payloadCrc32 = static_cast<uint32_t>(parsedCrc32);
+  requireAck = parsedRequireAck != 0U;
+  strncpy(nodeId, parsedNodeId, nodeIdSize - 1U);
+  nodeId[nodeIdSize - 1U] = '\0';
+  strncpy(payload, parsedPayload, payloadSize - 1U);
+  payload[payloadSize - 1U] = '\0';
+  return true;
+}
+
+inline bool parseAckPacket(const char *packet, uint32_t &sessionId, uint32_t &sequence, uint32_t &payloadCrc32) {
+  if (packet == nullptr) {
+    return false;
+  }
+
+  unsigned long parsedSessionId = 0;
+  unsigned long parsedSequence = 0;
+  unsigned long parsedCrc32 = 0;
+  const int parsed = sscanf(packet,
+                            "A|%lu|%lu|%lu",
+                            &parsedSessionId,
+                            &parsedSequence,
+                            &parsedCrc32);
+  if (parsed != 3) {
+    return false;
+  }
+
+  sessionId = static_cast<uint32_t>(parsedSessionId);
+  sequence = static_cast<uint32_t>(parsedSequence);
+  payloadCrc32 = static_cast<uint32_t>(parsedCrc32);
+  return true;
 }
 
 class ILoRaTransport {
@@ -148,11 +247,21 @@ class LinkService {
  public:
   explicit LinkService(ILoRaTransport &transport) : transport_(transport) {}
 
-  void begin(bool enabled, const char *nodeId, uint8_t maxRetries, uint32_t retryBackoffMs, uint32_t sessionSeed = 0U) {
+  void begin(bool enabled,
+             const char *nodeId,
+             uint8_t maxRetries,
+             uint32_t retryBackoffMs,
+             uint32_t sessionSeed = 0U,
+             uint8_t queueWarningDepthThreshold = 0U) {
     stats_ = LinkStats{};
     stats_.enabled = enabled;
     maxRetries_ = maxRetries;
     retryBackoffMs_ = retryBackoffMs;
+    queueWarningDepthThreshold_ = queueWarningDepthThreshold == 0U
+                                      ? static_cast<uint8_t>(kQueueCapacity - 2U)
+                                      : (queueWarningDepthThreshold > kQueueCapacity
+                                             ? static_cast<uint8_t>(kQueueCapacity)
+                                             : queueWarningDepthThreshold);
     strncpy(nodeId_, nodeId, sizeof(nodeId_) - 1U);
     nodeId_[sizeof(nodeId_) - 1U] = '\0';
     stats_.sessionId = deriveSessionId(nodeId_, sessionSeed);
@@ -179,13 +288,15 @@ class LinkService {
     frame.lastAttemptAtMs = 0;
     if (!queue_.enqueue(frame)) {
       ++stats_.droppedFrames;
-      stats_.queueDepth = queue_.size();
+      stats_.lastDroppedAtMs = now;
+      stats_.lastDroppedSequence = frame.sequence;
+      updateQueueStats(now);
       return false;
     }
 
     ++stats_.enqueuedFrames;
     stats_.lastSequence = frame.sequence;
-    stats_.queueDepth = queue_.size();
+    updateQueueStats(now);
     return true;
   }
 
@@ -197,16 +308,16 @@ class LinkService {
     transport_.poll(stats_);
     TelemetryFrame *frame = queue_.front();
     if (frame == nullptr) {
-      stats_.queueDepth = 0;
+      updateQueueStats(now);
       return;
     }
     if (!transport_.ready()) {
       stats_.backendReady = false;
-      stats_.queueDepth = queue_.size();
+      updateQueueStats(now);
       return;
     }
     if (frame->lastAttemptAtMs > 0U && (now - frame->lastAttemptAtMs) < retryBackoffMs_) {
-      stats_.queueDepth = queue_.size();
+      updateQueueStats(now);
       return;
     }
 
@@ -219,10 +330,12 @@ class LinkService {
       ++stats_.failedSendAttempts;
       if (frame->attempts > maxRetries_) {
         ++stats_.droppedFrames;
+        stats_.lastDroppedAtMs = now;
+        stats_.lastDroppedSequence = frame->sequence;
         queue_.pop();
       }
     }
-    stats_.queueDepth = queue_.size();
+    updateQueueStats(now);
   }
 
   bool validateInboundFrame(uint32_t sessionId, uint32_t sequence, uint32_t payloadCrc32, const char *payload) {
@@ -249,6 +362,19 @@ class LinkService {
   }
 
  private:
+  void updateQueueStats(uint32_t now) {
+    stats_.queueDepth = queue_.size();
+    if (stats_.queueDepth > stats_.maxQueueDepthObserved) {
+      stats_.maxQueueDepthObserved = stats_.queueDepth;
+    }
+    const bool warningActive = stats_.queueDepth >= queueWarningDepthThreshold_;
+    if (warningActive && !stats_.queueWarningActive) {
+      ++stats_.queueWarningCount;
+      stats_.lastQueueWarningAtMs = now;
+    }
+    stats_.queueWarningActive = warningActive;
+  }
+
   bool seenRecently(uint32_t sessionId, uint32_t sequence) const {
     for (const auto &entry : recentInbound_) {
       if (entry.sessionId == sessionId && entry.sequence == sequence) {
@@ -273,6 +399,7 @@ class LinkService {
   uint32_t sequence_ = 0;
   uint8_t maxRetries_ = 0;
   uint32_t retryBackoffMs_ = 0;
+  uint8_t queueWarningDepthThreshold_ = static_cast<uint8_t>(kQueueCapacity - 2U);
 };
 
 inline int buildCompactTelemetry(char *buffer,

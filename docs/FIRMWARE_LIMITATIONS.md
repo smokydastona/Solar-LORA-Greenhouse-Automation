@@ -19,19 +19,20 @@ Use this file to prevent over-trusting the controller during deployment planning
 - Sensor values now expire by age instead of remaining valid indefinitely after the last successful sample.
 - Servo movement is now time-limited and detached after a drive window, with repeated retrigger attempts able to force safe mode.
 - VPD, dew point, frost-risk evaluation, and crop-profile interpretation are implemented.
-- MQTT publishing and Home Assistant discovery are implemented when configured.
-- A compact LoRa telemetry payload, queue, retry policy, session identifier, CRC metadata, and inbound duplicate-rejection primitive are implemented in code, even though the concrete radio backend is still disabled.
+- MQTT publishing, Home Assistant discovery, and safe inbound MQTT mode commands are implemented when configured.
+- The onboard SX1262 now has a live RadioLib-backed raw LoRa transport with explicit ACK handling, queue retries, session identifiers, CRC metadata, and inbound duplicate-rejection primitives.
 - Compile-time configuration is now validated at boot, and an invalid threshold or timing combination forces config-fault safe mode instead of running with a broken policy.
 - The controller supports the current owned-hardware DHT22 plus SG90 path and the fuller BME280 plus DS18B20 plus BH1750 path documented elsewhere in the repo.
+- Operator diagnostics now include a third OLED diagnostics page plus richer MQTT diagnostics around battery raw millivolts, battery banding, LoRa ACK health, and last remote command status.
 
 ## Not currently implemented as verified firmware features
 
 - Battery-voltage awareness is enabled for the Heltec onboard `VBAT_Read` path, but the reading should still be checked against a meter, trimmed if needed, and explicitly marked calibrated in settings on the real board.
 - Direct current-sensed servo-stall detection is not implemented.
-- Remote mode commands are not implemented; the current MQTT and Home Assistant path is read-only state telemetry.
 - Hardware-in-the-loop validation is not part of the current repo workflow.
 - LittleFS is no longer auto-formatted on mount failure; a storage fault now leaves logging disabled until the filesystem is repaired deliberately.
-- The LoRa abstraction does not yet include a live SX1262 transport driver, link-quality metrics, or verified over-the-air commissioning flow.
+- The current power telemetry path is still voltage-only. It does not yet measure solar current, load current, harvested energy, or runtime under measured load.
+- The LoRa backend is implemented, but frequency selection, peer receiver interoperability, and real greenhouse radio commissioning still require field validation on the actual deployment pair.
 
 ## Host-side control-logic coverage now present
 
@@ -46,6 +47,8 @@ Use this file to prevent over-trusting the controller during deployment planning
 - Host-side tests cover defogger night gating and heater off-threshold behavior.
 - Host-side tests cover grow-light schedule and lux-threshold edge cases.
 - Host-side tests cover LoRa queue send, retry, drop, and compact-payload formatting behavior.
+- Host-side tests cover LoRa wire-packet and ACK parsing behavior.
+- Host-side tests cover inbound remote mode-command parsing and safety gating.
 - These tests validate the shared control-decision function, not the full board-level hardware stack.
 
 ## Safe operating interpretation
@@ -70,4 +73,4 @@ These are design intentions documented in the repo. They should not be treated a
 
 - USB flashing is the guaranteed update path.
 - OTA remains optional convenience, not a required service path.
-- Before unattended long-duration deployment, final battery calibration, jam handling, and hardware-in-the-loop validation should still be treated as open engineering work.
+- Before unattended long-duration deployment, final battery calibration, LoRa peer commissioning, jam handling, and hardware-in-the-loop validation should still be treated as open engineering work.

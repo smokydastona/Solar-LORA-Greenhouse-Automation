@@ -35,6 +35,7 @@ This is the build sequence for the complete first-generation controller system i
 3. Verify the onboard OLED display initializes.
 4. Verify the serial console starts at 115200 baud.
 5. If Wi-Fi is configured, verify the board joins Wi-Fi and advertises OTA.
+6. If LoRa transport is enabled in [../include/Settings.h](../include/Settings.h), confirm the configured radio frequency matches your legal regional band before first on-air transmission.
 
 ## Stage 2: wire the sensor bus
 
@@ -52,9 +53,11 @@ This is the build sequence for the complete first-generation controller system i
 1. This Heltec-style SX1262 LoRa V3 board exposes an onboard battery-read path: `VBAT_Read` on GPIO 1 with `ADC_Ctrl` on GPIO 37.
 2. Do not connect any battery or 5 V rail directly to an ESP32 GPIO; use the board's own battery-read circuit for this target board.
 3. Verify the reported battery voltage against a multimeter on the real battery terminals and trim the calibration offset in [../include/Settings.h](../include/Settings.h) if needed.
-4. Leave `calibrationVerified` set to `false` in [../include/Settings.h](../include/Settings.h) until that meter check is complete; the display and telemetry now mark unverified battery readings with a trailing `?` and `battery.calibrated=false`.
+4. Leave `calibrationVerified` set to `false` in [../include/Settings.h](../include/Settings.h) until that meter check is complete; the display and telemetry now mark unverified battery readings with a trailing `?`, `battery.calibrated=false`, and an `UNCALIBRATED` battery band.
 5. If you want MQTT or Home Assistant telemetry, configure the broker settings in [../include/Settings.h](../include/Settings.h) before commissioning.
-6. If you expect day/night-dependent fan, grow-light, or air-sensor-fallback behavior to track real daylight, commission either the BH1750 path or a reliable Wi-Fi time source before unattended use.
+6. If you want safe inbound MQTT mode control, use only the exact mode-command topic `greenhouse/mini/command/mode/set` with payloads `AUTO`, `OPEN`, or `CLOSED` when the default base topic is left unchanged.
+7. The current mode state is published to `greenhouse/mini/command/mode/state`, and the last mode-command result is published to `greenhouse/mini/command/mode/result` when the default base topic is used.
+8. If you expect day/night-dependent fan, grow-light, or air-sensor-fallback behavior to track real daylight, commission either the BH1750 path or a reliable Wi-Fi time source before unattended use.
 
 ### Fuller upgrade path
 
@@ -143,11 +146,13 @@ This is the build sequence for the complete first-generation controller system i
 9. Verify the reported battery voltage against a multimeter before trusting the percentage value.
 10. After that verification, set `Settings::BATTERY.calibrationVerified` to `true` so the display and telemetry stop flagging the reading as uncommissioned.
 11. If MQTT is enabled, verify that the retained state topic and Home Assistant discovery entities appear as expected.
-12. If battery voltage falls below the configured low threshold, confirm the controller sheds grow-light and circulation outputs before the system reaches the critical band.
-13. If battery voltage falls below the configured critical threshold, confirm the controller suppresses controller-backed switched loads and avoids new servo moves until battery state recovers.
-14. Simulate a repeated air-sensor failure and verify the controller enters safe mode instead of continuing blind climate control.
-15. After any forced reboot during servo travel, confirm the controller comes back in safe mode and requires inspection before normal operation resumes.
-16. If BH1750 is disabled, also verify that Wi-Fi time is available before relying on any day/night-dependent behavior; otherwise the controller now defaults those paths to night behavior.
+12. If inbound mode control is enabled, publish `AUTO`, `OPEN`, and `CLOSED` to the mode-command topic one at a time and confirm the controller accepts them only when it is not in safe mode.
+13. If LoRa is enabled, verify the receiving peer returns the matching ACK frame before treating the radio link as commissioned.
+14. If battery voltage falls below the configured low threshold, confirm the controller sheds grow-light and circulation outputs before the system reaches the critical band.
+15. If battery voltage falls below the configured critical threshold, confirm the controller suppresses controller-backed switched loads and avoids new servo moves until battery state recovers.
+16. Simulate a repeated air-sensor failure and verify the controller enters safe mode instead of continuing blind climate control.
+17. After any forced reboot during servo travel, confirm the controller comes back in safe mode and requires inspection before normal operation resumes.
+18. If BH1750 is disabled, also verify that Wi-Fi time is available before relying on any day/night-dependent behavior; otherwise the controller now defaults those paths to night behavior.
 
 ## Safe-mode and recovery behavior
 

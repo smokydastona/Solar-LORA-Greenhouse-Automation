@@ -33,6 +33,13 @@ struct LoggingConfig {
   uint32_t otaPollIntervalMs;
 };
 
+struct DiagnosticsConfig {
+  uint8_t recentFaultCapacity;
+  uint8_t loraQueueWarningDepth;
+  uint32_t servoSlowMoveThresholdMs;
+  uint32_t eventRateLimitMs;
+};
+
 struct ReliabilityConfig {
   bool enableHardwareWatchdog;
   bool enableSoftwareWatchdog;
@@ -76,6 +83,7 @@ struct MqttConfig {
   bool enableHomeAssistantDiscovery;
   uint32_t reconnectIntervalMs;
   uint32_t publishIntervalMs;
+  bool enableInboundModeCommands;
 };
 
 struct LoRaConfig {
@@ -83,6 +91,14 @@ struct LoRaConfig {
   const char *nodeId;
   uint8_t maxRetries;
   uint32_t retryBackoffMs;
+  float frequencyMHz;
+  float bandwidthKHz;
+  uint8_t spreadingFactor;
+  uint8_t codingRate;
+  uint8_t syncWord;
+  int8_t outputPowerDbm;
+  uint16_t preambleLength;
+  uint32_t ackTimeoutMs;
 };
 
 struct CropConfig {
@@ -123,6 +139,13 @@ constexpr LoggingConfig LOGGING{
     2000UL,
     5000UL,
     10000UL,
+};
+
+constexpr DiagnosticsConfig DIAGNOSTICS{
+  4,
+  6,
+  1500UL,
+  30000UL,
 };
 
 constexpr ReliabilityConfig RELIABILITY{
@@ -168,6 +191,7 @@ constexpr MqttConfig MQTT{
   true,
   10000UL,
   30000UL,
+  true,
 };
 
 constexpr LoRaConfig LORA{
@@ -175,6 +199,14 @@ constexpr LoRaConfig LORA{
   "mini-greenhouse-01",
   3,
   5000UL,
+  915.0F,
+  125.0F,
+  9,
+  7,
+  0x12,
+  10,
+  8,
+  250UL,
 };
 
 constexpr CropConfig CROP{

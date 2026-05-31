@@ -143,9 +143,10 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - Time-limited servo drive windows with cooldown-based protection against repeated retriggering
 - VPD, dew point, frost risk, crop profile evaluation, and crop-status interpretation
 - Heltec onboard battery-voltage sensing on the board's `VBAT_Read` path, with explicit telemetry showing whether the reading has been meter-verified on the deployed board
+- Battery diagnostics expanded on the same onboard `VBAT_Read` path with raw millivolts and operator-facing battery band reporting
 - Explicit controller-state resolution with low-power load shedding and bounded sensor freshness expiry
-- Optional MQTT publishing with Home Assistant discovery payloads
-- LoRa telemetry queueing with session identifiers, CRC metadata, and duplicate-frame rejection primitives, while the radio backend remains intentionally unfinished
+- Optional MQTT publishing with Home Assistant discovery payloads and safe inbound mode commands limited to `AUTO`, `OPEN`, and `CLOSED`
+- Raw SX1262 LoRa telemetry with RadioLib-backed queue retries, session identifiers, CRC metadata, duplicate-frame rejection, and matching ACK handling
 
 ## Quick Start
 
@@ -191,11 +192,11 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - Reliability primitives such as boot tracking, safe mode, watchdog handling, flash-write discipline, and sensor-availability reporting now exist in code.
 - The runtime now resolves an explicit controller state, validates configuration at boot, and sheds nonessential loads when battery state falls below the configured thresholds.
 - Greenhouse intelligence now goes beyond raw temperature and humidity and includes VPD, dew point, frost risk, and crop profiles.
-- Optional MQTT and Home Assistant discovery are implemented, and the LoRa payload and retry queue contract now exists, but richer integrations such as Grafana, Prometheus, REST, webhooks, and a finished LoRa radio backend remain future work.
+- Optional MQTT and Home Assistant discovery are implemented, safe remote mode control is now available over dedicated MQTT topics, and the SX1262 radio backend is implemented for raw LoRa telemetry with ACKs. Richer integrations such as Grafana bridges, Prometheus, REST, and webhooks remain future work.
 - Power telemetry is still earlier than the rest of the system: onboard battery sensing is wired in firmware, but it ships unverified until the deployed board is meter-checked and marked calibrated in settings, and solar current, charge-state telemetry, and full energy accounting are not yet complete.
 
 - This repo is already strong in system definition, safety boundaries, and build documentation.
-- The biggest remaining professionalization gaps are now power-system telemetry, richer telemetry consumers, irrigation instrumentation, LoRa transport completion, and broader fault sensing rather than the complete absence of reliability or telemetry primitives.
+- The biggest remaining professionalization gaps are now power-system telemetry beyond voltage-only sensing, richer telemetry consumers, irrigation instrumentation, field validation of the live LoRa path, and broader fault sensing rather than the complete absence of reliability or telemetry primitives.
 - The roadmap in this repo is grounded in the greenhouse code and docs that actually exist here, not in aspirational claims about hardware or integrations that have not yet been validated.
 
 ## Design Boundaries

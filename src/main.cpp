@@ -15,6 +15,7 @@
 #include <esp_system.h>
 #include <esp_task_wdt.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 #include <WiFi.h>
 #include <Wire.h>
@@ -22,7 +23,9 @@
 #include "ControlLogic.h"
 #include "ControllerRuntime.h"
 #include "LoRaLink.h"
+#include "LoRaSX1262Transport.h"
 #include "PinMap.h"
+#include "RemoteControl.h"
 #include "Settings.h"
 
 namespace {
@@ -33,12 +36,19 @@ using GreenhouseLogic::CropProfile;
 using GreenhouseLogic::CropStatus;
 using GreenhouseLogic::GreenhouseMetrics;
 using GreenhouseLogic::SensorSnapshot;
+using GreenhouseRemote::CommandAudit;
+using GreenhouseRemote::CommandStatus;
 using GreenhouseRuntime::ConfigFault;
 using GreenhouseRuntime::ControllerState;
+using GreenhouseRuntime::DiagnosticCode;
 using GreenhouseRuntime::PowerBudget;
+
+constexpr const char *kCommandLogPath = "/command_log.csv";
+constexpr size_t kRecentFaultCapacity = 4U;
 
 struct BatteryState {
   float voltageV = 0.0F;
+  uint32_t rawMilliVolts = 0;
   int percent = 0;
   bool available = false;
   bool calibrated = false;
@@ -61,6 +71,12 @@ struct SensorFaultState {
   uint8_t consecutiveAirFaults = 0;
   uint32_t lastAirFaultAt = 0;
   uint32_t lastAirRecoveryAt = 0;
+  uint32_t airReadFailures = 0;
+  uint32_t bmeReadFailures = 0;
+  uint32_t dhtReadFailures = 0;
+  uint32_t lightReadFailures = 0;
+  uint32_t waterReadFailures = 0;
+  bool airUnavailableLogged = false;
 };
 
 struct ServoProtectionState {
@@ -70,6 +86,18 @@ struct ServoProtectionState {
   uint32_t motionEndsAt = 0;
   uint32_t cooldownEndsAt = 0;
   uint8_t protectionTrips = 0;
+  uint32_t commandBlockedCount = 0;
+  uint32_t lastMoveStartedAt = 0;
+  uint32_t lastMoveCompletedAt = 0;
+  uint32_t lastMoveDurationMs = 0;
+  uint32_t longestMoveDurationMs = 0;
+};
+
+struct RecentFaultEntry {
+  DiagnosticCode code = DiagnosticCode::none;
+  uint32_t atMs = 0;
+  int32_t detail = 0;
+  uint32_t bootCount = 0;
 };
 
 struct SensorCacheState {
@@ -147,6 +175,22 @@ const char *safeModeReasonLabel(SafeModeReason reason) {
   return "NONE";
 }
 
+const char *batteryBandLabel(const BatteryState &battery) {
+  if (!battery.available) {
+    return "UNAVAILABLE";
+  }
+  if (!battery.calibrated) {
+    return "UNCALIBRATED";
+  }
+  if (battery.critical) {
+    return "CRITICAL";
+  }
+  if (battery.low) {
+    return "LOW";
+  }
+  return "NORMAL";
+}
+
 bool validAirReading(float tempC, float humidityPct) {
   return !isnan(tempC) && !isnan(humidityPct) && tempC > -40.0F && tempC < 85.0F && humidityPct >= 0.0F && humidityPct <= 100.0F;
 }
@@ -188,6 +232,7 @@ class Button {
 class GreenhouseController {
  public:
   void begin() {
+    activeInstance_ = this;
     Serial.begin(115200);
     delay(200);
     pinMode(PinMap::STATUS_LED, OUTPUT);
@@ -274,6 +319,12 @@ class GreenhouseController {
 
     if (!bootHealthy_ && now >= Settings::RELIABILITY.bootHealthyAfterMs) {
       markBootHealthy();
+    }
+  }
+
+  static void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
+    if (activeInstance_ != nullptr) {
+      activeInstance_->handleMqttMessage(topic, payload, length);
     }
   }
 
@@ -453,6 +504,7 @@ class GreenhouseController {
     mqttEnabled_ = strlen(Settings::MQTT.host) > 0;
     mqttClient_.setClient(wifiClient_);
     mqttClient_.setBufferSize(1536);
+    mqttClient_.setCallback(GreenhouseController::mqttCallback);
     if (mqttEnabled_) {
       mqttClient_.setServer(Settings::MQTT.host, Settings::MQTT.port);
     }
@@ -464,6 +516,29 @@ class GreenhouseController {
                     Settings::LORA.maxRetries,
                     Settings::LORA.retryBackoffMs,
                     bootCount_ ^ static_cast<uint32_t>(lastResetReason_));
+  }
+
+  void handleMqttMessage(char *topic, uint8_t *payload, unsigned int length) {
+    if (!Settings::MQTT.enableInboundModeCommands) {
+      return;
+    }
+
+    char expectedTopic[GreenhouseRemote::kTopicSize];
+    GreenhouseRemote::buildModeCommandTopic(expectedTopic, sizeof(expectedTopic), Settings::MQTT.baseTopic);
+
+    char payloadBuffer[32]{};
+    const size_t copyLength = length < (sizeof(payloadBuffer) - 1U) ? length : (sizeof(payloadBuffer) - 1U);
+    memcpy(payloadBuffer, payload, copyLength);
+    payloadBuffer[copyLength] = '\0';
+
+    lastCommandAudit_ = GreenhouseRemote::evaluateModeCommand(safeMode_, topic, expectedTopic, payloadBuffer, millis());
+    if (lastCommandAudit_.status == CommandStatus::accepted) {
+      setMode(lastCommandAudit_.applied);
+    }
+
+    appendCommandAudit(topic, payloadBuffer, lastCommandAudit_);
+    publishModeCommandState();
+    publishModeCommandResult();
   }
 
   void pollButtons() {
@@ -486,6 +561,7 @@ class GreenhouseController {
   void setMode(ControlMode mode) {
     mode_ = mode;
     preferences_.putUChar("mode", static_cast<uint8_t>(mode_));
+    publishModeCommandState();
     renderDisplay(true);
   }
 
@@ -497,12 +573,22 @@ class GreenhouseController {
       result.airTempC = bme_.readTemperature();
       result.humidityPct = bme_.readHumidity();
       airValidNow = validAirReading(result.airTempC, result.humidityPct);
+      if (!airValidNow && sensorFaults_.bmeReadFailures < UINT32_MAX) {
+        ++sensorFaults_.bmeReadFailures;
+      }
     }
 
     if (!airValidNow && dhtReady_) {
       result.airTempC = dht_.readTemperature();
       result.humidityPct = dht_.readHumidity();
       airValidNow = validAirReading(result.airTempC, result.humidityPct);
+      if (!airValidNow && sensorFaults_.dhtReadFailures < UINT32_MAX) {
+        ++sensorFaults_.dhtReadFailures;
+      }
+    }
+
+    if (!airValidNow && (bmeReady_ || dhtReady_) && sensorFaults_.airReadFailures < UINT32_MAX) {
+      ++sensorFaults_.airReadFailures;
     }
 
     if (airValidNow) {
@@ -522,6 +608,8 @@ class GreenhouseController {
       if (result.lightLux >= 0.0F && result.lightLux < 200000.0F) {
         sensorCache_.lastLightLux = result.lightLux;
         sensorCache_.lastLightAt = now;
+      } else if (sensorFaults_.lightReadFailures < UINT32_MAX) {
+        ++sensorFaults_.lightReadFailures;
       }
     }
     result.lightAgeMs = GreenhouseRuntime::sampleAgeMs(now, sensorCache_.lastLightAt);
@@ -536,6 +624,8 @@ class GreenhouseController {
       if (result.waterTempC > -100.0F && result.waterTempC < 125.0F) {
         sensorCache_.lastWaterTempC = result.waterTempC;
         sensorCache_.lastWaterAt = now;
+      } else if (sensorFaults_.waterReadFailures < UINT32_MAX) {
+        ++sensorFaults_.waterReadFailures;
       }
     }
     result.waterAgeMs = GreenhouseRuntime::sampleAgeMs(now, sensorCache_.lastWaterAt);
@@ -581,6 +671,11 @@ class GreenhouseController {
           now - sensorFaults_.lastAirFaultAt >= Settings::RELIABILITY.sensorFaultRecoveryDelayMs) {
         sensorFaults_.consecutiveAirFaults = 0;
       }
+      if (sensorFaults_.airUnavailableLogged) {
+        recordDiagnosticEvent(DiagnosticCode::airSensorRecovered,
+                              static_cast<int32_t>(now - sensorFaults_.lastAirFaultAt));
+        sensorFaults_.airUnavailableLogged = false;
+      }
       sensorFaults_.lastAirRecoveryAt = now;
       return;
     }
@@ -588,6 +683,21 @@ class GreenhouseController {
     sensorFaults_.lastAirFaultAt = now;
     if (sensorFaults_.consecutiveAirFaults < 255U) {
       ++sensorFaults_.consecutiveAirFaults;
+    }
+    if (!sensorFaults_.airUnavailableLogged) {
+      recordDiagnosticEvent(DiagnosticCode::airSensorUnavailable,
+                            static_cast<int32_t>(sensorFaults_.consecutiveAirFaults));
+      sensorFaults_.airUnavailableLogged = true;
+    }
+    if (sensorFaults_.lightReadFailures > recordedLightFailures_) {
+      recordDiagnosticEvent(DiagnosticCode::lightSensorReadFailure,
+                            static_cast<int32_t>(sensorFaults_.lightReadFailures));
+      recordedLightFailures_ = sensorFaults_.lightReadFailures;
+    }
+    if (sensorFaults_.waterReadFailures > recordedWaterFailures_) {
+      recordDiagnosticEvent(DiagnosticCode::waterSensorReadFailure,
+                            static_cast<int32_t>(sensorFaults_.waterReadFailures));
+      recordedWaterFailures_ = sensorFaults_.waterReadFailures;
     }
 
     if (!safeMode_ &&
@@ -677,8 +787,16 @@ class GreenhouseController {
     }
 
     if (!force && (servoProtection_.motionActive || now < servoProtection_.cooldownEndsAt)) {
+      if (servoProtection_.commandBlockedCount < UINT32_MAX) {
+        ++servoProtection_.commandBlockedCount;
+      }
       if (servoProtection_.protectionTrips < 255U) {
         ++servoProtection_.protectionTrips;
+      }
+      if (now - lastServoBlockedEventAt_ >= Settings::DIAGNOSTICS.eventRateLimitMs) {
+        recordDiagnosticEvent(DiagnosticCode::servoCommandBlocked,
+                              static_cast<int32_t>(servoProtection_.commandBlockedCount));
+        lastServoBlockedEventAt_ = now;
       }
       if (servoProtection_.protectionTrips >= Settings::RELIABILITY.servoProtectionTripsBeforeSafeMode) {
         enterSafeMode(SafeModeReason::servoProtect);
@@ -699,6 +817,7 @@ class GreenhouseController {
     servoProtection_.topTargetDegrees = topTarget;
     servoProtection_.bottomTargetDegrees = bottomTarget;
     servoProtection_.motionActive = true;
+    servoProtection_.lastMoveStartedAt = now;
     servoProtection_.motionEndsAt = now + Settings::RELIABILITY.servoDriveWindowMs;
     servoProtection_.cooldownEndsAt = servoProtection_.motionEndsAt + Settings::RELIABILITY.servoCooldownMs;
     preferences_.putBool("servo_pending", true);
@@ -719,6 +838,15 @@ class GreenhouseController {
       bottomServo_.detach();
     }
     servoProtection_.motionActive = false;
+    servoProtection_.lastMoveCompletedAt = now;
+    servoProtection_.lastMoveDurationMs = now - servoProtection_.lastMoveStartedAt;
+    if (servoProtection_.lastMoveDurationMs > servoProtection_.longestMoveDurationMs) {
+      servoProtection_.longestMoveDurationMs = servoProtection_.lastMoveDurationMs;
+    }
+    if (servoProtection_.lastMoveDurationMs > Settings::DIAGNOSTICS.servoSlowMoveThresholdMs) {
+      recordDiagnosticEvent(DiagnosticCode::servoMoveSlow,
+                            static_cast<int32_t>(servoProtection_.lastMoveDurationMs));
+    }
     preferences_.putBool("servo_pending", false);
   }
 
@@ -734,6 +862,8 @@ class GreenhouseController {
     char vpdBuffer[16];
     char dewBuffer[16];
     char batteryBuffer[16];
+    char loraBuffer[24];
+    char commandBuffer[24];
     formatMeasurement(airBuffer, sizeof(airBuffer), snapshot_.airAvailable, snapshot_.airTempC, 1, "C");
     if (snapshot_.airAvailable) {
       snprintf(airBuffer,
@@ -762,6 +892,17 @@ class GreenhouseController {
              WiFi.status() == WL_CONNECTED ? "WiFi" : "OFF",
              mqttClient_.connected() ? "/MQTT" : "",
              filesystemReady_ ? "" : " FS!");
+    snprintf(loraBuffer,
+         sizeof(loraBuffer),
+         "%s Q%u A%lu",
+         loraLink_.stats().backendReady ? "LORA" : "NO-LORA",
+         static_cast<unsigned>(loraLink_.stats().queueDepth),
+         static_cast<unsigned long>(loraLink_.stats().acknowledgedFrames));
+    snprintf(commandBuffer,
+         sizeof(commandBuffer),
+         "%s %s",
+         GreenhouseRemote::modeCommandLabel(lastCommandAudit_.requested),
+         GreenhouseRemote::commandStatusLabel(lastCommandAudit_.status));
 
     if (fullRefresh) {
       display_.clearDisplay();
@@ -777,7 +918,7 @@ class GreenhouseController {
       display_.printf("Batt:%s\n", batteryBuffer);
       display_.printf("Air: %s\n", airBuffer);
       display_.printf("MODE=resume");
-    } else if (((millis() / Settings::LOGGING.displayIntervalMs) % 2U) == 0U) {
+    } else if (((millis() / Settings::LOGGING.displayIntervalMs) % 3U) == 0U) {
       display_.printf("State:%s\n", GreenhouseRuntime::controllerStateLabel(controllerState_));
       display_.printf("Air:  %s\n", airBuffer);
       display_.printf("Water: %s\n", waterBuffer);
@@ -793,7 +934,7 @@ class GreenhouseController {
                       effectiveActuators_.defoggerOn ? 'Y' : 'N',
                       effectiveActuators_.growLightOn ? 'Y' : 'N',
                       statusBuffer);
-    } else {
+    } else if (((millis() / Settings::LOGGING.displayIntervalMs) % 3U) == 1U) {
       const CropProfile &profile = GreenhouseLogic::cropProfile(Settings::CROP.profile);
       display_.printf("Crop: %s\n", profile.name);
       display_.printf("State:%s\n", cropStatusLabel(metrics_.cropStatus));
@@ -802,6 +943,14 @@ class GreenhouseController {
       display_.printf("Frost:%s\n", metrics_.frostRisk ? "YES" : "NO");
       display_.printf("Batt: %s\n", batteryBuffer);
       display_.printf("Health:%d %s", computeHealthScore(), statusBuffer);
+    } else {
+      display_.printf("Diag:%s\n", statusBuffer);
+      display_.printf("Power:%s\n", batteryBandLabel(battery_));
+      display_.printf("Raw:%lumV\n", static_cast<unsigned long>(battery_.rawMilliVolts));
+      display_.printf("%s\n", loraBuffer);
+      display_.printf("ACK T/O:%lu\n", static_cast<unsigned long>(loraLink_.stats().ackTimeouts));
+      display_.printf("Cmd:%s\n", commandBuffer);
+      display_.printf("RSSI:%d SNR:%.1f", loraLink_.stats().lastRssi, static_cast<double>(loraLink_.stats().lastSnr));
     }
     display_.display();
   }
@@ -848,7 +997,7 @@ class GreenhouseController {
     if (!file) {
       return;
     }
-    file.println("millis,mode,controller_state,safe_mode,safe_reason,reset_reason,boot_failures,air_available,air_temp_c,humidity_pct,water_available,water_temp_c,light_available,light_lux,vpd_kpa,dew_point_c,frost_risk,crop_status,battery_available,battery_v,battery_pct,health_score,top_open,bottom_open,fan_exhaust,fan_intake,defogger,grow_light,circulation,lora_queue,lora_sent,lora_dropped");
+    file.println("millis,mode,controller_state,safe_mode,safe_reason,reset_reason,boot_failures,air_available,air_temp_c,humidity_pct,water_available,water_temp_c,light_available,light_lux,vpd_kpa,dew_point_c,frost_risk,crop_status,battery_available,battery_raw_mv,battery_v,battery_pct,battery_band,health_score,top_open,bottom_open,fan_exhaust,fan_intake,defogger,grow_light,circulation,lora_queue,lora_sent,lora_acked,lora_ack_timeouts,lora_dropped,lora_queue_warns,lora_max_queue,air_faults,bme_errors,dht_errors,light_errors,water_errors,servo_blocked,servo_last_move_ms,servo_longest_move_ms,diag_last_code,diag_last_detail");
     file.close();
   }
 
@@ -860,16 +1009,19 @@ class GreenhouseController {
     if (!file) {
       return;
     }
+    const RecentFaultEntry latestFault = latestRecentFault();
     if (file.size() == 0) {
-      file.println("millis,boot_count,boot_failures,reset_reason,safe_mode,safe_reason");
+      file.println("millis,boot_count,boot_failures,reset_reason,safe_mode,safe_reason,diag_last_code,diag_last_detail");
     }
-    file.printf("%lu,%lu,%u,%s,%u,%s\n",
+    file.printf("%lu,%lu,%u,%s,%u,%s,%s,%ld\n",
                 millis(),
                 static_cast<unsigned long>(bootCount_),
                 static_cast<unsigned>(bootFailures_),
                 resetReasonLabel(lastResetReason_),
                 safeMode_,
-                safeModeReasonLabel(safeModeReason_));
+                safeModeReasonLabel(safeModeReason_),
+                GreenhouseRuntime::diagnosticCodeLabel(latestFault.code),
+                static_cast<long>(latestFault.detail));
     file.close();
   }
 
@@ -881,7 +1033,8 @@ class GreenhouseController {
     if (!file) {
       return;
     }
-    file.printf("%lu,%s,%s,%u,%s,%s,%u,%u,%.2f,%.2f,%u,%.2f,%u,%.2f,%.2f,%.2f,%u,%s,%u,%.2f,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%lu,%lu\n",
+    const RecentFaultEntry latestFault = latestRecentFault();
+    file.printf("%lu,%s,%s,%u,%s,%s,%u,%u,%.2f,%.2f,%u,%.2f,%u,%.2f,%.2f,%.2f,%u,%s,%u,%lu,%.2f,%d,%s,%d,%u,%u,%u,%u,%u,%u,%u,%u,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%s,%ld\n",
                 millis(),
                 modeLabel(),
                 GreenhouseRuntime::controllerStateLabel(controllerState_),
@@ -901,8 +1054,10 @@ class GreenhouseController {
                 metrics_.frostRisk,
                 cropStatusLabel(metrics_.cropStatus),
                 battery_.available,
+                static_cast<unsigned long>(battery_.rawMilliVolts),
                 battery_.voltageV,
                 battery_.percent,
+                batteryBandLabel(battery_),
                 computeHealthScore(),
                 effectiveActuators_.topVentOpen,
                 effectiveActuators_.bottomVentOpen,
@@ -913,7 +1068,43 @@ class GreenhouseController {
                 effectiveActuators_.circulationFansOn,
                 static_cast<unsigned>(loraLink_.stats().queueDepth),
                 static_cast<unsigned long>(loraLink_.stats().sentFrames),
-                static_cast<unsigned long>(loraLink_.stats().droppedFrames));
+                static_cast<unsigned long>(loraLink_.stats().acknowledgedFrames),
+                static_cast<unsigned long>(loraLink_.stats().ackTimeouts),
+                static_cast<unsigned long>(loraLink_.stats().droppedFrames),
+                static_cast<unsigned long>(loraLink_.stats().queueWarningCount),
+                static_cast<unsigned long>(loraLink_.stats().maxQueueDepthObserved),
+                static_cast<unsigned long>(sensorFaults_.airReadFailures),
+                static_cast<unsigned long>(sensorFaults_.bmeReadFailures),
+                static_cast<unsigned long>(sensorFaults_.dhtReadFailures),
+                static_cast<unsigned long>(sensorFaults_.lightReadFailures),
+                static_cast<unsigned long>(sensorFaults_.waterReadFailures),
+                static_cast<unsigned long>(servoProtection_.commandBlockedCount),
+                static_cast<unsigned long>(servoProtection_.lastMoveDurationMs),
+                static_cast<unsigned long>(servoProtection_.longestMoveDurationMs),
+                GreenhouseRuntime::diagnosticCodeLabel(latestFault.code),
+                static_cast<long>(latestFault.detail));
+    file.close();
+  }
+
+  void appendCommandAudit(const char *topic, const char *payload, const CommandAudit &audit) {
+    if (!filesystemReady_) {
+      return;
+    }
+    File file = LittleFS.open(kCommandLogPath, FILE_APPEND);
+    if (!file) {
+      return;
+    }
+    if (file.size() == 0) {
+      file.println("millis,topic,payload,requested,status,applied,safe_mode");
+    }
+    file.printf("%lu,%s,%s,%s,%s,%s,%u\n",
+                static_cast<unsigned long>(audit.receivedAtMs),
+                topic != nullptr ? topic : "",
+                payload != nullptr ? payload : "",
+                GreenhouseRemote::modeCommandLabel(audit.requested),
+                GreenhouseRemote::commandStatusLabel(audit.status),
+                GreenhouseRemote::controlModeLabel(audit.applied),
+                safeMode_ ? 1U : 0U);
     file.close();
   }
 
@@ -952,6 +1143,9 @@ class GreenhouseController {
   }
 
   void enterSafeMode(SafeModeReason reason) {
+    if (!safeMode_ || safeModeReason_ != reason) {
+      recordDiagnosticEvent(DiagnosticCode::safeModeEntered, static_cast<int32_t>(reason));
+    }
     safeMode_ = true;
     safeModeReason_ = reason;
   }
@@ -967,6 +1161,73 @@ class GreenhouseController {
     preferences_.putUChar("boot_fail", 0U);
     bootHealthy_ = true;
     bootFailures_ = 0U;
+  }
+
+  void recordDiagnosticEvent(DiagnosticCode code, int32_t detail) {
+    if (code == DiagnosticCode::none) {
+      return;
+    }
+
+    const uint8_t slot = recentFaultCount_ < kRecentFaultCapacity
+                             ? static_cast<uint8_t>((recentFaultHead_ + recentFaultCount_) % kRecentFaultCapacity)
+                             : recentFaultHead_;
+    if (recentFaultCount_ < kRecentFaultCapacity) {
+      ++recentFaultCount_;
+    } else {
+      recentFaultHead_ = static_cast<uint8_t>((recentFaultHead_ + 1U) % kRecentFaultCapacity);
+    }
+
+    recentFaults_[slot].code = code;
+    recentFaults_[slot].atMs = millis();
+    recentFaults_[slot].detail = detail;
+    recentFaults_[slot].bootCount = bootCount_;
+    persistRecentFaultState(slot);
+  }
+
+  RecentFaultEntry latestRecentFault() const {
+    if (recentFaultCount_ == 0U) {
+      return RecentFaultEntry{};
+    }
+    const uint8_t latestIndex = static_cast<uint8_t>((recentFaultHead_ + recentFaultCount_ - 1U) % kRecentFaultCapacity);
+    return recentFaults_[latestIndex];
+  }
+
+  void persistRecentFaultState(uint8_t slot) {
+    char key[16];
+    preferences_.putUChar("fault_head", recentFaultHead_);
+    preferences_.putUChar("fault_cnt", recentFaultCount_);
+
+    snprintf(key, sizeof(key), "fault%u_cd", static_cast<unsigned>(slot));
+    preferences_.putUChar(key, static_cast<uint8_t>(recentFaults_[slot].code));
+    snprintf(key, sizeof(key), "fault%u_ms", static_cast<unsigned>(slot));
+    preferences_.putUInt(key, recentFaults_[slot].atMs);
+    snprintf(key, sizeof(key), "fault%u_dt", static_cast<unsigned>(slot));
+    preferences_.putInt(key, recentFaults_[slot].detail);
+    snprintf(key, sizeof(key), "fault%u_bt", static_cast<unsigned>(slot));
+    preferences_.putUInt(key, recentFaults_[slot].bootCount);
+  }
+
+  void loadRecentFaultState() {
+    recentFaultHead_ = preferences_.getUChar("fault_head", 0U);
+    recentFaultCount_ = preferences_.getUChar("fault_cnt", 0U);
+    if (recentFaultHead_ >= kRecentFaultCapacity) {
+      recentFaultHead_ = 0U;
+    }
+    if (recentFaultCount_ > kRecentFaultCapacity) {
+      recentFaultCount_ = kRecentFaultCapacity;
+    }
+
+    char key[16];
+    for (uint8_t slot = 0; slot < kRecentFaultCapacity; ++slot) {
+      snprintf(key, sizeof(key), "fault%u_cd", static_cast<unsigned>(slot));
+      recentFaults_[slot].code = static_cast<DiagnosticCode>(preferences_.getUChar(key, static_cast<uint8_t>(DiagnosticCode::none)));
+      snprintf(key, sizeof(key), "fault%u_ms", static_cast<unsigned>(slot));
+      recentFaults_[slot].atMs = preferences_.getUInt(key, 0U);
+      snprintf(key, sizeof(key), "fault%u_dt", static_cast<unsigned>(slot));
+      recentFaults_[slot].detail = preferences_.getInt(key, 0);
+      snprintf(key, sizeof(key), "fault%u_bt", static_cast<unsigned>(slot));
+      recentFaults_[slot].bootCount = preferences_.getUInt(key, 0U);
+    }
   }
 
   void markProgress(uint32_t now) {
@@ -1006,6 +1267,7 @@ class GreenhouseController {
     const float measuredV = (static_cast<float>(totalMilliVolts) /
                              static_cast<float>(Settings::BATTERY.samplesPerRead)) /
                             1000.0F;
+    state.rawMilliVolts = totalMilliVolts / static_cast<uint32_t>(Settings::BATTERY.samplesPerRead);
     state.voltageV = (measuredV * Settings::BATTERY.dividerRatio) + Settings::BATTERY.calibrationOffsetVolts;
     state.available = state.voltageV > 0.1F;
     if (!state.available) {
@@ -1037,6 +1299,12 @@ class GreenhouseController {
     if (!snapshot_.airAvailable) {
       score -= 25;
     }
+    if (sensorFaults_.lightReadFailures > 0U) {
+      score -= 5;
+    }
+    if (sensorFaults_.waterReadFailures > 0U) {
+      score -= 5;
+    }
     if (!filesystemReady_) {
       score -= 15;
     }
@@ -1053,6 +1321,9 @@ class GreenhouseController {
       score -= 10;
     }
     if (loraLink_.stats().enabled && !loraLink_.stats().backendReady) {
+      score -= 10;
+    }
+    if (loraLink_.stats().queueWarningActive) {
       score -= 10;
     }
     return score < 0 ? 0 : score;
@@ -1093,7 +1364,14 @@ class GreenhouseController {
     }
 
     mqttClient_.publish(availabilityTopic, "online", true);
+    if (Settings::MQTT.enableInboundModeCommands) {
+      char commandTopic[GreenhouseRemote::kTopicSize];
+      GreenhouseRemote::buildModeCommandTopic(commandTopic, sizeof(commandTopic), Settings::MQTT.baseTopic);
+      mqttClient_.subscribe(commandTopic);
+    }
     publishHomeAssistantDiscovery();
+    publishModeCommandState();
+    publishModeCommandResult();
     lastTelemetryPublishAt_ = millis();
     publishTelemetry(lastTelemetryPublishAt_);
   }
@@ -1116,7 +1394,74 @@ class GreenhouseController {
     publishHomeAssistantSensorDiscovery("binary_sensor", "defogger", "Defogger", "{{ value_json.actuators.defogger }}", "heat", "", "");
     publishHomeAssistantSensorDiscovery("binary_sensor", "grow_light", "Grow Light", "{{ value_json.actuators.grow_light }}", "light", "", "");
     publishHomeAssistantSensorDiscovery("binary_sensor", "circulation", "Circulation", "{{ value_json.actuators.circulation }}", "running", "", "");
+    publishHomeAssistantSensorDiscovery("sensor", "battery_voltage", "Battery Voltage", "{{ value_json.battery.voltage_v }}", "voltage", "measurement", "V");
+    publishHomeAssistantSensorDiscovery("sensor", "lora_queue_depth", "LoRa Queue Depth", "{{ value_json.lora.queue_depth }}", "", "measurement", "frames");
+    publishHomeAssistantSensorDiscovery("sensor", "lora_acknowledged", "LoRa Acknowledged", "{{ value_json.lora.acknowledged }}", "", "measurement", "frames");
+    publishHomeAssistantSensorDiscovery("sensor", "lora_ack_timeouts", "LoRa ACK Timeouts", "{{ value_json.lora.ack_timeouts }}", "", "measurement", "frames");
+    publishHomeAssistantSensorDiscovery("binary_sensor", "safe_mode_active", "Safe Mode Active", "{{ value_json.safe_mode.active }}", "problem", "", "");
+    publishHomeAssistantSensorDiscovery("binary_sensor", "battery_low", "Battery Low", "{{ value_json.battery.low }}", "battery", "", "");
+    publishHomeAssistantSensorDiscovery("binary_sensor", "battery_critical", "Battery Critical", "{{ value_json.battery.critical }}", "battery", "", "");
+    publishHomeAssistantSensorDiscovery("binary_sensor", "lora_ready", "LoRa Ready", "{{ value_json.connectivity.lora }}", "connectivity", "", "");
+    publishHomeAssistantModeSelectDiscovery();
     discoveryPublished_ = true;
+  }
+
+  void publishHomeAssistantModeSelectDiscovery() {
+    if (!Settings::MQTT.enableInboundModeCommands) {
+      return;
+    }
+
+    char topic[192];
+    char payload[1024];
+    char commandTopic[GreenhouseRemote::kTopicSize];
+    char stateTopic[GreenhouseRemote::kTopicSize];
+    char availabilityTopic[96];
+
+    GreenhouseRemote::buildModeCommandTopic(commandTopic, sizeof(commandTopic), Settings::MQTT.baseTopic);
+    GreenhouseRemote::buildModeStateTopic(stateTopic, sizeof(stateTopic), Settings::MQTT.baseTopic);
+    snprintf(availabilityTopic, sizeof(availabilityTopic), "%s/availability", Settings::MQTT.baseTopic);
+    snprintf(topic,
+             sizeof(topic),
+             "%s/select/%s_mode_control/config",
+             Settings::MQTT.discoveryPrefix,
+             Settings::MQTT.clientId);
+    snprintf(payload,
+             sizeof(payload),
+             "{\"name\":\"Control Mode\",\"uniq_id\":\"%s_mode_control\",\"cmd_t\":\"%s\",\"stat_t\":\"%s\",\"avty_t\":\"%s\",\"options\":[\"AUTO\",\"OPEN\",\"CLOSED\"],\"dev\":{\"ids\":[\"%s\"],\"name\":\"Mini Greenhouse\",\"mdl\":\"ESP32-S3 Greenhouse Controller\",\"mf\":\"Solar LoRa Greenhouse Automation\"}}",
+             Settings::MQTT.clientId,
+             commandTopic,
+             stateTopic,
+             availabilityTopic,
+             Settings::MQTT.clientId);
+    mqttClient_.publish(topic, payload, true);
+  }
+
+  void publishModeCommandState() {
+    if (!mqttClient_.connected() || !Settings::MQTT.enableInboundModeCommands) {
+      return;
+    }
+
+    char topic[GreenhouseRemote::kTopicSize];
+    GreenhouseRemote::buildModeStateTopic(topic, sizeof(topic), Settings::MQTT.baseTopic);
+    mqttClient_.publish(topic, modeLabel(), true);
+  }
+
+  void publishModeCommandResult() {
+    if (!mqttClient_.connected() || !Settings::MQTT.enableInboundModeCommands || !lastCommandAudit_.available) {
+      return;
+    }
+
+    char topic[GreenhouseRemote::kTopicSize];
+    char payload[256];
+    GreenhouseRemote::buildModeResultTopic(topic, sizeof(topic), Settings::MQTT.baseTopic);
+    snprintf(payload,
+             sizeof(payload),
+             "{\"requested\":\"%s\",\"status\":\"%s\",\"applied\":\"%s\",\"received_at_ms\":%lu}",
+             GreenhouseRemote::modeCommandLabel(lastCommandAudit_.requested),
+             GreenhouseRemote::commandStatusLabel(lastCommandAudit_.status),
+             GreenhouseRemote::controlModeLabel(lastCommandAudit_.applied),
+             static_cast<unsigned long>(lastCommandAudit_.receivedAtMs));
+    mqttClient_.publish(topic, payload, true);
   }
 
   void publishHomeAssistantSensorDiscovery(const char *component,
@@ -1160,7 +1505,7 @@ class GreenhouseController {
     const CropProfile &profile = GreenhouseLogic::cropProfile(Settings::CROP.profile);
     snprintf(payload,
              payloadSize,
-             "{\"mode\":\"%s\",\"controller_state\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"age_ms\":%lu,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"calibrated\":%s,\"voltage_v\":%.2f,\"percent\":%d,\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"power_budget\":{\"servo_moves\":%s,\"vent_fans\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"lora\":{\"session_id\":%lu,\"queue_depth\":%u,\"sent\":%lu,\"dropped\":%lu,\"duplicate_inbound\":%lu,\"invalid_inbound\":%lu},\"uptime_ms\":%lu}",
+             "{\"mode\":\"%s\",\"controller_state\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"age_ms\":%lu,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"calibrated\":%s,\"sensor\":\"VBAT_Read\",\"adc_ctrl_pin\":%d,\"raw_mv\":%lu,\"voltage_v\":%.2f,\"percent\":%d,\"band\":\"%s\",\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"power_budget\":{\"servo_moves\":%s,\"vent_fans\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"commands\":{\"mode\":{\"enabled\":%s,\"requested\":\"%s\",\"status\":\"%s\",\"applied\":\"%s\",\"received_at_ms\":%lu}},\"lora\":{\"session_id\":%lu,\"queue_depth\":%u,\"sent\":%lu,\"acknowledged\":%lu,\"ack_timeouts\":%lu,\"dropped\":%lu,\"duplicate_inbound\":%lu,\"invalid_inbound\":%lu,\"last_rssi_dbm\":%d,\"last_snr_db\":%.2f,\"last_error_code\":%d},\"uptime_ms\":%lu}",
              modeLabel(),
              GreenhouseRuntime::controllerStateLabel(controllerState_),
              safeMode_ ? "true" : "false",
@@ -1184,8 +1529,11 @@ class GreenhouseController {
              metrics_.frostRisk ? "true" : "false",
              battery_.available ? "true" : "false",
              battery_.calibrated ? "true" : "false",
+             static_cast<int>(PinMap::BATTERY_ADC_CTRL),
+             static_cast<unsigned long>(battery_.rawMilliVolts),
              battery_.voltageV,
              battery_.percent,
+             batteryBandLabel(battery_),
              battery_.low ? "true" : "false",
              battery_.critical ? "true" : "false",
              computeHealthScore(),
@@ -1206,12 +1554,22 @@ class GreenhouseController {
              otaReady_ ? "true" : "false",
              loraLink_.stats().backendReady ? "true" : "false",
              filesystemReady_ ? "true" : "false",
+             Settings::MQTT.enableInboundModeCommands ? "true" : "false",
+             GreenhouseRemote::modeCommandLabel(lastCommandAudit_.requested),
+             GreenhouseRemote::commandStatusLabel(lastCommandAudit_.status),
+             GreenhouseRemote::controlModeLabel(lastCommandAudit_.applied),
+             static_cast<unsigned long>(lastCommandAudit_.receivedAtMs),
              static_cast<unsigned long>(loraLink_.stats().sessionId),
              static_cast<unsigned>(loraLink_.stats().queueDepth),
              static_cast<unsigned long>(loraLink_.stats().sentFrames),
+             static_cast<unsigned long>(loraLink_.stats().acknowledgedFrames),
+             static_cast<unsigned long>(loraLink_.stats().ackTimeouts),
              static_cast<unsigned long>(loraLink_.stats().droppedFrames),
              static_cast<unsigned long>(loraLink_.stats().duplicateInboundFrames),
              static_cast<unsigned long>(loraLink_.stats().invalidInboundFrames),
+             loraLink_.stats().lastRssi,
+             static_cast<double>(loraLink_.stats().lastSnr),
+             static_cast<int>(loraLink_.stats().lastErrorCode),
              static_cast<unsigned long>(millis()));
   }
 
@@ -1243,6 +1601,15 @@ class GreenhouseController {
 
   void serviceLoRa(uint32_t now) {
     loraLink_.poll(now);
+    if (loraLink_.stats().queueWarningCount > recordedQueueWarningCount_) {
+      recordDiagnosticEvent(DiagnosticCode::loraQueueWarning, static_cast<int32_t>(loraLink_.stats().queueDepth));
+      recordedQueueWarningCount_ = loraLink_.stats().queueWarningCount;
+    }
+    if (loraLink_.stats().droppedFrames > recordedDroppedFrames_) {
+      recordDiagnosticEvent(DiagnosticCode::loraFrameDropped,
+                            static_cast<int32_t>(loraLink_.stats().lastDroppedSequence));
+      recordedDroppedFrames_ = loraLink_.stats().droppedFrames;
+    }
   }
 
   Preferences preferences_;
@@ -1254,7 +1621,14 @@ class GreenhouseController {
   Adafruit_SSD1306 display_{Settings::DISPLAY_WIDTH, Settings::DISPLAY_HEIGHT, &Wire, -1};
   WiFiClient wifiClient_;
   PubSubClient mqttClient_;
-  GreenhouseLoRa::DisabledTransport loraTransport_;
+  GreenhouseLoRa::SX1262Transport loraTransport_{Settings::LORA.frequencyMHz,
+                                                 Settings::LORA.bandwidthKHz,
+                                                 Settings::LORA.spreadingFactor,
+                                                 Settings::LORA.codingRate,
+                                                 Settings::LORA.syncWord,
+                                                 Settings::LORA.outputPowerDbm,
+                                                 Settings::LORA.preambleLength,
+                                                 Settings::LORA.ackTimeoutMs};
   GreenhouseLoRa::LinkService loraLink_{loraTransport_};
   Servo topServo_;
   Servo bottomServo_;
@@ -1284,6 +1658,7 @@ class GreenhouseController {
   bool safeMode_ = false;
   bool bootHealthy_ = false;
   bool rehomeAfterUnsafeReset_ = false;
+  CommandAudit lastCommandAudit_{};
   SafeModeReason safeModeReason_ = SafeModeReason::none;
   ConfigFault configFault_ = ConfigFault::none;
   esp_reset_reason_t lastResetReason_ = ESP_RST_UNKNOWN;
@@ -1299,7 +1674,11 @@ class GreenhouseController {
   uint32_t lastMqttConnectAttemptAt_ = 0;
   uint32_t lastTelemetryPublishAt_ = 0;
   uint32_t lastProgressAt_ = 0;
+
+  static GreenhouseController *activeInstance_;
 };
+
+GreenhouseController *GreenhouseController::activeInstance_ = nullptr;
 
 GreenhouseController controller;
 

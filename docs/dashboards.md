@@ -12,14 +12,15 @@ Current truth:
 The implemented telemetry contract already exposes the following dashboard-relevant fields over MQTT:
 
 - controller mode and safe-mode state
+- last remote mode-command result
 - health score
 - air temperature and humidity
 - VPD and dew point
 - frost risk
 - crop profile and crop status
-- battery voltage and percentage
+- battery raw millivolts, voltage, percentage, and band
 - actuator states
-- connectivity and storage readiness
+- connectivity, LoRa ACK health, and storage readiness
 
 Use [REMOTE_TELEMETRY_CONTRACT.md](./REMOTE_TELEMETRY_CONTRACT.md) as the payload authority.
 
@@ -31,6 +32,8 @@ Recommended current path:
 2. Connect the controller to a real broker.
 3. Allow MQTT discovery to create the base entities automatically.
 4. Layer a dashboard view on top of those discovered entities.
+
+The firmware now also publishes an MQTT/Home Assistant select entity for control mode. It accepts only `AUTO`, `OPEN`, and `CLOSED` and mirrors the current accepted mode state.
 
 Starter artifacts:
 
@@ -82,6 +85,7 @@ Use it only after you have a real telemetry pipeline that stores:
 
 - battery voltage
 - battery percentage
+- battery band
 - low and critical flags
 - future solar telemetry once the roadmap hardware exists
 
@@ -93,6 +97,15 @@ Use it only after you have a real telemetry pipeline that stores:
 - defogger
 - grow light
 - circulation
+
+### Diagnostics
+
+- last remote command status
+- LoRa queue depth
+- LoRa acknowledged count
+- LoRa ACK timeout count
+- LoRa ready state
+- filesystem readiness
 
 ## Compatibility Rule
 

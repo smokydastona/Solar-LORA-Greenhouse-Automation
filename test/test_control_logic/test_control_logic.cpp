@@ -4,6 +4,7 @@
 #include "ControlLogicDefaults.h"
 #include "ControllerRuntime.h"
 #include "LoRaLink.h"
+#include "RemoteControl.h"
 
 namespace {
 
@@ -438,6 +439,13 @@ void test_runtime_validation_rejects_bad_threshold_configuration() {
                           static_cast<uint8_t>(GreenhouseRuntime::validateConfiguration(input)));
 }
 
+void test_diagnostic_code_labels_expose_expected_strings() {
+  TEST_ASSERT_EQUAL_STRING("LORA_QUEUE_WARN",
+                           GreenhouseRuntime::diagnosticCodeLabel(GreenhouseRuntime::DiagnosticCode::loraQueueWarning));
+  TEST_ASSERT_EQUAL_STRING("SAFE_MODE",
+                           GreenhouseRuntime::diagnosticCodeLabel(GreenhouseRuntime::DiagnosticCode::safeModeEntered));
+}
+
 void test_metrics_compute_vpd_and_dew_point_for_valid_air_data() {
   GreenhouseLogic::SensorSnapshot snapshot{};
   snapshot.airAvailable = true;
@@ -522,6 +530,24 @@ void test_lora_link_service_retries_and_drops_after_max_retries() {
   TEST_ASSERT_EQUAL_UINT8(0U, link.stats().queueDepth);
 }
 
+void test_lora_link_service_tracks_queue_warning_and_max_depth() {
+  FakeLoRaTransport transport;
+  transport.readyState = false;
+  GreenhouseLoRa::LinkService link(transport);
+  link.begin(true, "node-q", 2, 100U, 19U, 2U);
+
+  TEST_ASSERT_TRUE(link.queueTelemetry("msg=1", 1U));
+  TEST_ASSERT_TRUE(link.queueTelemetry("msg=2", 2U));
+  TEST_ASSERT_TRUE(link.queueTelemetry("msg=3", 3U));
+
+  link.poll(4U);
+
+  TEST_ASSERT_TRUE(link.stats().queueWarningActive);
+  TEST_ASSERT_EQUAL_UINT32(1U, link.stats().queueWarningCount);
+  TEST_ASSERT_EQUAL_UINT32(3U, link.stats().maxQueueDepthObserved);
+  TEST_ASSERT_EQUAL_UINT32(2U, link.stats().lastQueueWarningAtMs);
+}
+
 void test_compact_lora_telemetry_contains_core_fields() {
   char payload[GreenhouseLoRa::kPayloadSize];
   GreenhouseLoRa::buildCompactTelemetry(payload,
@@ -543,6 +569,54 @@ void test_compact_lora_telemetry_contains_core_fields() {
   TEST_ASSERT_NOT_EQUAL(nullptr, strstr(payload, "bp=76"));
 }
 
+void test_lora_wire_packet_round_trips_through_parser() {
+  GreenhouseLoRa::TelemetryFrame frame{};
+  strncpy(frame.nodeId, "node-d", sizeof(frame.nodeId) - 1U);
+  strncpy(frame.payload, "temp=25.2", sizeof(frame.payload) - 1U);
+  frame.sessionId = 99U;
+  frame.sequence = 7U;
+  frame.crc32 = GreenhouseLoRa::crc32(frame.payload);
+  frame.requireAck = true;
+
+  char packet[GreenhouseLoRa::kWirePacketSize];
+  TEST_ASSERT_GREATER_THAN(0, GreenhouseLoRa::buildWireTelemetryPacket(packet, sizeof(packet), frame));
+
+  uint32_t sessionId = 0;
+  uint32_t sequence = 0;
+  uint32_t payloadCrc32 = 0;
+  bool requireAck = false;
+  char nodeId[GreenhouseLoRa::kNodeIdSize]{};
+  char payload[GreenhouseLoRa::kPayloadSize]{};
+  TEST_ASSERT_TRUE(GreenhouseLoRa::parseWireTelemetryPacket(packet,
+                                                            sessionId,
+                                                            sequence,
+                                                            payloadCrc32,
+                                                            requireAck,
+                                                            nodeId,
+                                                            sizeof(nodeId),
+                                                            payload,
+                                                            sizeof(payload)));
+  TEST_ASSERT_EQUAL_UINT32(99U, sessionId);
+  TEST_ASSERT_EQUAL_UINT32(7U, sequence);
+  TEST_ASSERT_EQUAL_UINT32(frame.crc32, payloadCrc32);
+  TEST_ASSERT_TRUE(requireAck);
+  TEST_ASSERT_EQUAL_STRING("node-d", nodeId);
+  TEST_ASSERT_EQUAL_STRING("temp=25.2", payload);
+}
+
+void test_lora_ack_packet_round_trips_through_parser() {
+  char packet[GreenhouseLoRa::kAckPacketSize];
+  TEST_ASSERT_GREATER_THAN(0, GreenhouseLoRa::buildAckPacket(packet, sizeof(packet), 33U, 4U, 12345U));
+
+  uint32_t sessionId = 0;
+  uint32_t sequence = 0;
+  uint32_t payloadCrc32 = 0;
+  TEST_ASSERT_TRUE(GreenhouseLoRa::parseAckPacket(packet, sessionId, sequence, payloadCrc32));
+  TEST_ASSERT_EQUAL_UINT32(33U, sessionId);
+  TEST_ASSERT_EQUAL_UINT32(4U, sequence);
+  TEST_ASSERT_EQUAL_UINT32(12345U, payloadCrc32);
+}
+
 void test_lora_link_service_rejects_invalid_or_duplicate_inbound_frames() {
   FakeLoRaTransport transport;
   GreenhouseLoRa::LinkService link(transport);
@@ -558,6 +632,54 @@ void test_lora_link_service_rejects_invalid_or_duplicate_inbound_frames() {
   TEST_ASSERT_EQUAL_UINT32(1U, link.stats().duplicateInboundFrames);
   TEST_ASSERT_EQUAL_UINT32(1U, link.stats().invalidInboundFrames);
   TEST_ASSERT_EQUAL_UINT32(1U, link.stats().lastAcceptedSequence);
+}
+
+void test_remote_mode_command_parser_accepts_expected_values() {
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseRemote::ModeCommand::automatic),
+                          static_cast<uint8_t>(GreenhouseRemote::parseModeCommand("AUTO")));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseRemote::ModeCommand::open),
+                          static_cast<uint8_t>(GreenhouseRemote::parseModeCommand(" open ")));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseRemote::ModeCommand::closed),
+                          static_cast<uint8_t>(GreenhouseRemote::parseModeCommand("CLOSED")));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseRemote::ModeCommand::invalid),
+                          static_cast<uint8_t>(GreenhouseRemote::parseModeCommand("SAFE")));
+}
+
+void test_remote_mode_command_rejects_safe_mode_and_bad_topic() {
+  char expectedTopic[GreenhouseRemote::kTopicSize];
+  GreenhouseRemote::buildModeCommandTopic(expectedTopic, sizeof(expectedTopic), "greenhouse/mini");
+
+  const auto safeAudit = GreenhouseRemote::evaluateModeCommand(true,
+                                                               expectedTopic,
+                                                               expectedTopic,
+                                                               "OPEN",
+                                                               111U);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseRemote::CommandStatus::rejectedSafeMode),
+                          static_cast<uint8_t>(safeAudit.status));
+
+  const auto wrongTopicAudit = GreenhouseRemote::evaluateModeCommand(false,
+                                                                     "greenhouse/mini/other",
+                                                                     expectedTopic,
+                                                                     "OPEN",
+                                                                     112U);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseRemote::CommandStatus::rejectedTopic),
+                          static_cast<uint8_t>(wrongTopicAudit.status));
+}
+
+void test_remote_mode_command_accepts_valid_topic_and_payload() {
+  char expectedTopic[GreenhouseRemote::kTopicSize];
+  GreenhouseRemote::buildModeCommandTopic(expectedTopic, sizeof(expectedTopic), "greenhouse/mini");
+
+  const auto audit = GreenhouseRemote::evaluateModeCommand(false,
+                                                           expectedTopic,
+                                                           expectedTopic,
+                                                           "CLOSED",
+                                                           200U);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseRemote::CommandStatus::accepted),
+                          static_cast<uint8_t>(audit.status));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseLogic::ControlMode::forceClosed),
+                          static_cast<uint8_t>(audit.applied));
+  TEST_ASSERT_EQUAL_UINT32(200U, audit.receivedAtMs);
 }
 
 }  // namespace
@@ -597,13 +719,20 @@ int main(int argc, char **argv) {
   RUN_TEST(test_power_budget_sheds_all_controlled_loads_at_critical_battery);
   RUN_TEST(test_sensor_sample_freshness_expires_after_timeout);
   RUN_TEST(test_runtime_validation_rejects_bad_threshold_configuration);
+  RUN_TEST(test_diagnostic_code_labels_expose_expected_strings);
   RUN_TEST(test_metrics_compute_vpd_and_dew_point_for_valid_air_data);
   RUN_TEST(test_frost_risk_triggers_for_near_freezing_air_conditions);
   RUN_TEST(test_tomato_profile_reports_optimal_conditions);
   RUN_TEST(test_lettuce_profile_reports_stressed_conditions_when_too_hot);
   RUN_TEST(test_lora_link_service_sends_queued_frame_when_transport_is_ready);
   RUN_TEST(test_lora_link_service_retries_and_drops_after_max_retries);
+  RUN_TEST(test_lora_link_service_tracks_queue_warning_and_max_depth);
   RUN_TEST(test_compact_lora_telemetry_contains_core_fields);
+  RUN_TEST(test_lora_wire_packet_round_trips_through_parser);
+  RUN_TEST(test_lora_ack_packet_round_trips_through_parser);
   RUN_TEST(test_lora_link_service_rejects_invalid_or_duplicate_inbound_frames);
+  RUN_TEST(test_remote_mode_command_parser_accepts_expected_values);
+  RUN_TEST(test_remote_mode_command_rejects_safe_mode_and_bad_topic);
+  RUN_TEST(test_remote_mode_command_accepts_valid_topic_and_payload);
   return UNITY_END();
 }

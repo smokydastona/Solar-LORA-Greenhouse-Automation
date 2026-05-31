@@ -7,12 +7,12 @@ It exists so dashboards, Home Assistant, and any future LoRa or cloud bridge can
 ## Transport
 
 - Primary transport: MQTT over Wi-Fi
-- Secondary firmware contract: compact LoRa payload queued through the internal radio abstraction
+- Secondary transport: raw point-to-point LoRa over the onboard SX1262 using RadioLib
 - MQTT client library: PubSubClient
 - State publishing: retained JSON payloads
 - Availability: retained `online` or `offline` topic
 - Home Assistant integration: MQTT discovery payloads published automatically on broker connection when enabled
-- LoRa status exposure: session id plus queue depth, sent, dropped, duplicate, and invalid counters are included in the JSON state payload
+- LoRa status exposure: session id plus queue depth, sent, acknowledged, ACK timeout, dropped, duplicate, invalid, RSSI, SNR, and last-error counters are included in the JSON state payload
 
 ## Configuration surface
 
@@ -31,6 +31,7 @@ Relevant fields:
 - `discoveryPrefix`
 - `enableHomeAssistantDiscovery`
 - `publishIntervalMs`
+- `enableInboundModeCommands`
 
 LoRa queue configuration lives beside it in [../include/Settings.h](../include/Settings.h) under `Settings::LORA`.
 
@@ -42,6 +43,9 @@ Assuming the default `baseTopic` is `greenhouse/mini`:
 | --- | --- |
 | `greenhouse/mini/state` | retained full-controller JSON state |
 | `greenhouse/mini/availability` | retained availability state: `online` or `offline` |
+| `greenhouse/mini/command/mode/set` | inbound mode command topic accepting only `AUTO`, `OPEN`, or `CLOSED` |
+| `greenhouse/mini/command/mode/state` | retained current mode state for dashboards and Home Assistant select entities |
+| `greenhouse/mini/command/mode/result` | retained result of the last inbound mode command |
 
 If Home Assistant discovery is enabled, the firmware also publishes retained config payloads under:
 
@@ -89,8 +93,12 @@ The current state topic publishes a retained JSON document shaped like this:
   "battery": {
     "available": false,
     "calibrated": false,
+    "sensor": "VBAT_Read",
+    "adc_ctrl_pin": 37,
+    "raw_mv": 0,
     "voltage_v": 0.0,
     "percent": 0,
+    "band": "UNAVAILABLE",
     "low": false,
     "critical": false
   },
@@ -115,13 +123,27 @@ The current state topic publishes a retained JSON document shaped like this:
   "storage": {
     "filesystem_ready": true
   },
+  "commands": {
+    "mode": {
+      "enabled": true,
+      "requested": "AUTO",
+      "status": "NONE",
+      "applied": "AUTO",
+      "received_at_ms": 0
+    }
+  },
   "lora": {
     "session_id": 123456789,
     "queue_depth": 0,
     "sent": 0,
+    "acknowledged": 0,
+    "ack_timeouts": 0,
     "dropped": 0,
     "duplicate_inbound": 0,
-    "invalid_inbound": 0
+    "invalid_inbound": 0,
+    "last_rssi_dbm": -77,
+    "last_snr_db": 7.5,
+    "last_error_code": 0
   },
   "uptime_ms": 123456
 }
@@ -171,7 +193,10 @@ Interpret them like this:
 
 - `available` remains `false`
 - `calibrated` remains `false` until the reading has been checked against a real meter and explicitly marked verified in settings
+- `sensor` and `adc_ctrl_pin` identify the exact existing onboard measurement path in use today
+- `raw_mv` is the averaged ADC-side reading before divider scaling and calibration offset are applied
 - voltage and percent should not be treated as trusted operational battery truth until both `available` and `calibrated` are `true`
+- `band` is an operator-facing summary with values such as `UNAVAILABLE`, `UNCALIBRATED`, `NORMAL`, `LOW`, and `CRITICAL`
 
 ### Sensor freshness
 
@@ -189,6 +214,14 @@ It is intended as an operator summary, not a formal reliability metric.
 - `servo_moves`: whether the controller is currently allowed to issue new vent servo moves
 - `vent_fans`: whether controller-backed intake and exhaust fans are allowed to run
 - `defogger`, `grow_light`, `circulation`: whether those branches are currently allowed to energize under the active battery policy
+
+### `commands.mode`
+
+- `enabled`: whether inbound MQTT mode control is enabled in settings
+- `requested`: the last received command payload after parsing
+- `status`: `NONE`, `ACCEPTED`, `REJECTED_INVALID_PAYLOAD`, `REJECTED_TOPIC`, or `REJECTED_SAFE_MODE`
+- `applied`: the accepted control mode associated with that command path
+- `received_at_ms`: millis timestamp of the last processed inbound mode command
 
 ## Home Assistant discovery entities
 
@@ -208,11 +241,22 @@ When discovery is enabled, the firmware currently publishes discovery for:
 - grow-light state
 - circulation state
 
-The current integration is read-only. It does not yet accept mode changes or remote actuator commands.
+- battery voltage
+- LoRa queue depth
+- LoRa acknowledged count
+- LoRa ACK timeout count
+- safe-mode active flag
+- battery low and battery critical flags
+- LoRa ready flag
+- an MQTT/Home Assistant select entity for remote control mode selection
 
-## LoRa compact payload contract
+The current integration accepts only remote mode changes. It does not accept direct actuator commands.
 
-The firmware also builds a compact ASCII payload for the internal LoRa queue. It is designed for low-bandwidth telemetry and currently includes:
+## LoRa on-air contract
+
+The firmware builds a compact ASCII telemetry payload for the LoRa link service and wraps it in a raw on-air frame with explicit ACK behavior.
+
+The compact telemetry payload still includes:
 
 - node id
 - mode
@@ -221,9 +265,17 @@ The firmware also builds a compact ASCII payload for the internal LoRa queue. It
 - air temperature and humidity when available
 - battery voltage and percentage when available
 
-Each queued frame also carries a boot-scoped session id, a sequence number, and a CRC32 computed over the payload. The link service can reject duplicate or invalid inbound frames through its built-in validation window.
+Telemetry frames are sent over the air in this shape:
 
-The queue and retry policy are implemented in firmware, but the concrete SX1262 radio transport is still intentionally disabled until the on-air backend is validated.
+- `T|session_id|sequence|payload_crc32|require_ack|node_id|payload`
+
+The receiver is expected to ACK a valid frame with:
+
+- `A|session_id|sequence|payload_crc32`
+
+Each queued frame carries a boot-scoped session id, a sequence number, and a CRC32 computed over the compact payload. The link service treats a frame as delivered only when the matching ACK is received within the configured timeout and can reject duplicate or invalid inbound frames through its validation window.
+
+The firmware now uses the onboard SX1262 through RadioLib. You must still configure a legal frequency and validate the peer receiver path for your region before relying on the radio link in unattended deployment.
 
 ## Remote dashboard minimum viable layout
 
@@ -264,8 +316,9 @@ Any dashboard consuming this contract should, at minimum, expose:
 - Wi-Fi state
 - MQTT state
 - OTA enabled state
-- LoRa readiness plus queue and drop counters
+- LoRa readiness plus queue, acknowledged, ACK timeout, RSSI, SNR, and error counters
 - filesystem readiness
+- last remote command result
 - uptime
 
 ## Compatibility rule
