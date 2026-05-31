@@ -6,21 +6,23 @@ Reference diagram: [5 V summer architecture](./diagrams/greenhouse-5v-summer-arc
 
 | Function | Pin |
 | --- | --- |
-| I2C SDA | GPIO 8 |
-| I2C SCL | GPIO 9 |
+| I2C SDA | GPIO 17 |
+| I2C SCL | GPIO 18 |
+| OLED reset | GPIO 21 |
+| OLED Vext power control | GPIO 36 active LOW |
 | DHT22 air sensor data | GPIO 16 verified on Header J3 pin 17 |
-| DS18B20 water probe | GPIO 10 |
-| Top vent servo signal | GPIO 3 |
-| Bottom vent servo signal | GPIO 4 |
+| DS18B20 water probe | GPIO 15 |
+| Top vent servo signal | GPIO 7 |
+| Bottom vent servo signal | GPIO 6 |
 | Exhaust fan MOSFET gate | GPIO 5 |
-| Intake fan MOSFET gate | GPIO 6 |
-| Defogger MOSFET gate | GPIO 7 |
-| Grow-light MOSFET gate | GPIO 11 |
-| Circulation fan MOSFET gate | GPIO 12 |
-| Mode button | GPIO 13 |
-| Force-open button | GPIO 14 |
-| Force-close button | GPIO 15 |
-| Status LED | GPIO 48 |
+| Intake fan MOSFET gate | GPIO 42 |
+| Defogger MOSFET gate | GPIO 41 |
+| Grow-light MOSFET gate | GPIO 40 |
+| Circulation fan MOSFET gate | GPIO 39 |
+| Mode button | GPIO 47 |
+| Force-open button | GPIO 38 |
+| Force-close button | GPIO 33 |
+| Status LED | GPIO 35 onboard LED |
 
 ## Controller electrical topology
 
@@ -45,6 +47,14 @@ all grounds
         -> servo GND
         -> MOSFET module GND
         -> load negative return
+
+board-reserved wiring
+    -> onboard OLED I2C on GPIO 17 and GPIO 18
+    -> OLED reset on GPIO 21
+    -> OLED Vext enable on GPIO 36, active LOW
+    -> onboard SX1262 LoRa on GPIO 8 to 14
+    -> onboard LED on GPIO 35
+    -> onboard USER button on GPIO 0
 ```
 
 ## 5 V branch targets
@@ -89,27 +99,27 @@ Measure the real final current draw before locking any fuse value into hardware.
 
 - This exact board family reserves several pins for onboard LoRa and OLED wiring.
 - GPIO 16 is safe to lock for the DHT22 path based on the published pinout image and wiring table.
-- Do not assume the rest of the repo's current generic `esp32-s3-devkitc-1` greenhouse pin map is already final for this exact LoRa board; the full board-specific pin remap still needs a separate verified pass.
+- The greenhouse pin map in this repo is now remapped around those onboard reservations for this board family.
 
 ### BME280
 
 - VIN -> 5 V
 - GND -> GND
-- SDA -> GPIO 8
-- SCL -> GPIO 9
+- SDA -> GPIO 17 shared board I2C bus
+- SCL -> GPIO 18 shared board I2C bus
 
 ### BH1750
 
 - VIN -> 5 V
 - GND -> GND
-- SDA -> GPIO 8
-- SCL -> GPIO 9
+- SDA -> GPIO 17 shared board I2C bus
+- SCL -> GPIO 18 shared board I2C bus
 
 ### DS18B20
 
 - Red -> 5 V
 - Black -> GND
-- Yellow or white -> GPIO 10
+- Yellow or white -> GPIO 15
 - 4.7 kOhm resistor between 5 V and data line
 
 ## Servo wiring
@@ -122,13 +132,13 @@ Upgrade path: move to MG90S-class metal-gear servos if the vent linkage proves t
 
 - Power red -> 5 V bus
 - Ground brown or black -> GND bus
-- Signal yellow or orange -> GPIO 3
+- Signal yellow or orange -> GPIO 7
 
 ### Bottom vent servo
 
 - Power red -> 5 V bus
 - Ground brown or black -> GND bus
-- Signal yellow or orange -> GPIO 4
+- Signal yellow or orange -> GPIO 6
 
 ## Button wiring
 
@@ -136,6 +146,12 @@ Each button uses the ESP32 internal pull-up.
 
 - One terminal -> GND
 - Other terminal -> configured GPIO
+
+Current board-specific button map:
+
+- `AUTO` -> GPIO 47
+- `FORCE OPEN` -> GPIO 38
+- `FORCE CLOSED` -> GPIO 33
 
 ## MOSFET branch wiring
 
@@ -182,4 +198,4 @@ LM2596 ground output
 - Use 18 AWG for any branch that actually carries actuator or fan current.
 - Treat 22 AWG to 24 AWG as signal and sensor wire only.
 - Treat GPIO 16 as the locked DHT22 data pin on this board family.
-- Treat the remainder of the board-specific greenhouse pin map as still needing a dedicated verified remap before permanent wiring.
+- Keep GPIO 8 to 14, GPIO 17 to 18, GPIO 21, GPIO 35, GPIO 36, GPIO 43, and GPIO 44 reserved for the board's onboard functions unless you intentionally redesign around them.

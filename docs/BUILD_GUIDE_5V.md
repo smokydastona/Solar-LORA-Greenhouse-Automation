@@ -11,11 +11,12 @@ This is the build sequence for the complete first-generation controller system i
 - The default firmware configuration now supports the currently owned starter hardware: one DHT22 / AM2302 for air temperature and humidity and two SG90 vent servos.
 - In that starter path, BH1750 and DS18B20 stay optional and disabled until those sensors are actually added.
 - The DHT22 data pin is now locked to [include/PinMap.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/PinMap.h) `TEMP_AIR_DHT` on GPIO 16. On the Heltec-style SX1262 LoRa V3 pinout used by your bought board, GPIO 16 is broken out on Header J3 physical pin 17 and is not shown as one of the board's pre-wired OLED, LoRa, LED, or button signals.
-- Separate warning: that same board pinout shows several onboard reservations that do not match the repo's generic `esp32-s3-devkitc-1` pin assumptions. GPIO 16 is now verified for the DHT22 path, but the rest of the final board-specific greenhouse pin map still needs its own exact remap pass before permanent full-system wiring.
+- The greenhouse pin map is now remapped around the board's fixed OLED, LoRa, LED, button, and USB-serial reservations so the firmware pin definitions match this board family instead of the old generic devkit assumptions.
 
 ### Fuller upgrade path
 
 - The firmware still supports the fuller BME280 plus BH1750 plus DS18B20 sensor stack.
+- On this board family, that upgrade path uses the fixed shared I2C bus on GPIO 17 and GPIO 18, which is already used by the onboard OLED.
 - MG90S-class metal-gear servos remain the recommended torque upgrade if the real vent linkage is too heavy for SG90 units.
 
 ## Before you wire anything
@@ -30,7 +31,7 @@ This is the build sequence for the complete first-generation controller system i
 
 1. Flash the ESP32-S3 board with the firmware in this repository.
 2. Power the board from USB only.
-3. Verify the OLED display initializes.
+3. Verify the onboard OLED display initializes.
 4. Verify the serial console starts at 115200 baud.
 5. If Wi-Fi is configured, verify the board joins Wi-Fi and advertises OTA.
 
@@ -60,8 +61,9 @@ This is the build sequence for the complete first-generation controller system i
 4. Connect each servo signal wire to its configured GPIO.
 5. Verify both vents move between fully closed and fully open positions.
 6. Start with the bought SG90 servos as the current owned-hardware path.
-7. Adjust the servo angles in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) until travel matches the real vent geometry.
-8. If the SG90 units chatter, stall, or cannot hold the vents in wind, treat that as a mechanical limit and move to MG90S-class metal-gear servos.
+7. The default servo angles in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) are now deliberately reduced-travel SG90 bench-test values so first power-up stays conservative.
+8. Verify both vents move only through a small safe range first, then expand angles gradually until travel matches the real vent geometry.
+9. If the SG90 units chatter, stall, or cannot hold the vents in wind, treat that as a mechanical limit and move to MG90S-class metal-gear servos.
 
 ## Stage 4: add switched load outputs
 

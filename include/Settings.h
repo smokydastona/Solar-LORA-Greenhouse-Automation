@@ -78,10 +78,10 @@ constexpr ClimateConfig CLIMATE{
 };
 
 constexpr ServoConfig SERVOS{
-    8,
-    74,
-    12,
-    78,
+  28,
+  52,
+  30,
+  54,
 };
 
 constexpr LoggingConfig LOGGING{

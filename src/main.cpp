@@ -175,6 +175,16 @@ class GreenhouseController {
   }
 
   void initDisplay() {
+    pinMode(PinMap::OLED_VEXT, OUTPUT);
+    digitalWrite(PinMap::OLED_VEXT, LOW);
+    delay(50);
+
+    pinMode(PinMap::OLED_RESET, OUTPUT);
+    digitalWrite(PinMap::OLED_RESET, LOW);
+    delay(20);
+    digitalWrite(PinMap::OLED_RESET, HIGH);
+    delay(20);
+
     displayReady_ = display_.begin(SSD1306_SWITCHCAPVCC, Settings::OLED_ADDRESS);
     if (displayReady_) {
       display_.clearDisplay();
