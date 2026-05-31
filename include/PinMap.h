@@ -26,4 +26,5 @@ constexpr gpio_num_t BUTTON_FORCE_OPEN = GPIO_NUM_38;
 constexpr gpio_num_t BUTTON_FORCE_CLOSE = GPIO_NUM_33;
 
 constexpr gpio_num_t STATUS_LED = GPIO_NUM_35;
+constexpr int BATTERY_VOLTAGE = -1;
 }

@@ -108,9 +108,15 @@ The first-generation automation system is split into two layers.
 - Manual `AUTO`, `OPEN`, and `CLOSED` modes are implemented.
 - Automatic mode now applies a conservative air-sensor fallback: vent-open when the resolved day/night state is day, vent-closed when the resolved day/night state is night.
 - CSV logging to internal LittleFS is implemented.
+- Separate boot-event logging now records reset reason, boot count, safe-mode state, and failed-boot count.
 - Display and CSV logs now surface sensor availability explicitly so missing probes do not masquerade as valid zero readings.
 - OTA is optional and only available when Wi-Fi credentials are configured and OTA is enabled.
-- The firmware does not currently have battery-voltage awareness, servo-jam detection, or a dedicated watchdog policy.
+- Safe-mode boot is now implemented for manual recovery entry and repeated unfinished boots.
+- ESP32 task-watchdog and application-progress watchdog recovery are now implemented.
+- VPD, dew point, frost-risk, and crop-profile interpretation are now implemented.
+- Optional MQTT publishing and Home Assistant discovery are now implemented for remote telemetry consumers.
+- Battery-voltage awareness is implemented in firmware but remains hardware-dependent and disabled by default until an ADC divider path is installed and calibrated.
+- Servo-jam detection is still not implemented.
 
 See [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) for the explicit boundary between implemented behavior and documented design targets.
 
@@ -140,11 +146,11 @@ See [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) for the explicit bounda
 
 - Local logging in v1 is internal flash via LittleFS CSV files.
 - No SD card is part of the v1 design.
-- No remote telemetry is part of the required v1 greenhouse deployment.
+- Remote telemetry is now optional over MQTT and is not required for local greenhouse operation.
 - LoRa capability exists on the target board but is not part of the active first-generation control requirement.
 - USB flashing remains the guaranteed firmware update path.
 - OTA is optional over Wi-Fi when credentials are configured and the OTA flag is enabled.
-- A watchdog-based self-recovery policy is desirable before fully unattended long-term deployment, but it is not yet documented as implemented firmware behavior.
+- A watchdog-based self-recovery policy is now part of the documented firmware behavior.
 
 ## Four handheld mini fans subsystem
 

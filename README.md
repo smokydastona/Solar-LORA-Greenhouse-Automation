@@ -18,6 +18,7 @@ The implementation is based on the full greenhouse planning conversation capture
 - A maturity and feature-priority plan in [docs/PROFESSIONALIZATION_ROADMAP.md](./docs/PROFESSIONALIZATION_ROADMAP.md)
 - Contributor workflow guidance in [docs/DEVELOPER_GUIDE.md](./docs/DEVELOPER_GUIDE.md)
 - Field and bench recovery guidance in [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)
+- MQTT, Home Assistant, and dashboard payload contract in [docs/REMOTE_TELEMETRY_CONTRACT.md](./docs/REMOTE_TELEMETRY_CONTRACT.md)
 
 ## GitHub automation
 
@@ -36,6 +37,11 @@ The implementation is based on the full greenhouse planning conversation capture
 - OLED status display for climate values and actuator states
 - CSV logging to LittleFS
 - Optional Wi-Fi and OTA update support when Wi-Fi credentials are configured
+- Preferences-backed boot reason logging and boot-failure tracking
+- Safe-mode boot after repeated failed boots or by holding both override buttons during startup
+- ESP32 task-watchdog and application-progress watchdog recovery policy
+- VPD, dew point, frost risk, crop profile evaluation, and crop-status interpretation
+- Optional MQTT publishing with Home Assistant discovery payloads
 
 ## Quick start
 
@@ -72,11 +78,12 @@ The implementation is based on the full greenhouse planning conversation capture
 - Use [docs/FIRMWARE_LIMITATIONS.md](./docs/FIRMWARE_LIMITATIONS.md) before assuming a safety, recovery, or sensor-fallback behavior is already implemented.
 - Use [docs/PROFESSIONALIZATION_ROADMAP.md](./docs/PROFESSIONALIZATION_ROADMAP.md) for the prioritized path from current repo state to a more deployable open-source system.
 - Use [docs/DEVELOPER_GUIDE.md](./docs/DEVELOPER_GUIDE.md) before refactoring firmware, adding telemetry, or changing pin and threshold behavior.
+- Use [docs/REMOTE_TELEMETRY_CONTRACT.md](./docs/REMOTE_TELEMETRY_CONTRACT.md) before building a dashboard, Home Assistant package, or telemetry bridge.
 
 ## Maturity stance
 
 - This repo is already strong in system definition, safety boundaries, and build documentation.
-- The biggest remaining professionalization gaps are reliability hardening, power telemetry, plant-state intelligence, remote dashboarding, and integration surfaces such as MQTT or Home Assistant.
+- The biggest remaining professionalization gaps are now power-hardware rollout, richer telemetry consumers, irrigation instrumentation, and broader fault sensing rather than the complete absence of reliability or telemetry primitives.
 - The share links reviewed for this topic were mostly unrelated controller-remapper and generic ESP32 inspiration material, so the roadmap in this repo is grounded primarily in the greenhouse code and docs that actually exist here.
 
 ## Design boundaries

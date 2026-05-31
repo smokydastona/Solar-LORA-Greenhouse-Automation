@@ -46,6 +46,13 @@ This is the build sequence for the complete first-generation controller system i
 5. Power the controller and verify air temperature and humidity values appear on the display. Unavailable sensors now show `N/A` on the display instead of a fake zero reading.
 6. Leave BH1750 and DS18B20 disabled in [include/Settings.h](../include/Settings.h) until they are physically installed.
 
+### Optional reliability and telemetry add-ons
+
+1. If you want battery-voltage monitoring, add a safe resistor-divider path from the monitored DC rail to an ADC-capable ESP32-S3 pin.
+2. Do not connect any battery or 5 V rail directly to an ESP32 GPIO.
+3. Leave the battery monitor disabled in [../include/Settings.h](../include/Settings.h) until the divider, scaling ratio, and target ADC pin are confirmed on your actual board.
+4. If you want MQTT or Home Assistant telemetry, configure the broker settings in [../include/Settings.h](../include/Settings.h) before commissioning.
+
 ### Fuller upgrade path
 
 1. Wire I2C SDA and SCL from the ESP32-S3 to the BME280 and BH1750.
@@ -129,6 +136,16 @@ This is the build sequence for the complete first-generation controller system i
 6. Simulate main air-sensor loss and verify the controller falls back conservatively instead of continuing the last blind climate state.
 7. Check that a log file appears on LittleFS and includes the `*_available` columns for each optional sensor.
 8. Let the system run for at least one day before changing thresholds.
+9. If battery monitoring is enabled, verify the reported voltage against a multimeter before trusting the percentage value.
+10. If MQTT is enabled, verify that the retained state topic and Home Assistant discovery entities appear as expected.
+
+## Safe-mode and recovery behavior
+
+1. The firmware now records reset reason and tracks repeated failed boots in `Preferences`.
+2. Holding both override buttons during boot enters safe mode immediately.
+3. Repeated unfinished boots also force safe mode.
+4. In safe mode, the controller suppresses climate outputs and keeps the greenhouse in a quiet, inspectable state.
+5. Press the mode button while in safe mode to clear the boot-failure counter and reboot after the underlying problem is fixed.
 
 ## First-week field checks
 

@@ -8,15 +8,21 @@ Use this file to prevent over-trusting the controller during deployment planning
 
 - Manual `AUTO`, `OPEN`, and `CLOSED` modes are implemented.
 - CSV logging to internal LittleFS is implemented.
+- Separate boot-event logging is implemented in LittleFS.
 - Logged sensor rows now include explicit availability flags for air, water, and light readings.
 - OTA is optional and only available when Wi-Fi credentials are configured and OTA is enabled.
+- Preferences-backed boot reason logging and failed-boot counting are implemented.
+- Safe-mode boot is implemented for repeated failed boots and manual two-button entry at startup.
+- An ESP32 task watchdog and an application-progress watchdog are implemented.
+- VPD, dew point, frost-risk evaluation, and crop-profile interpretation are implemented.
+- MQTT publishing and Home Assistant discovery are implemented when configured.
 - The controller supports the current owned-hardware DHT22 plus SG90 path and the fuller BME280 plus DS18B20 plus BH1750 path documented elsewhere in the repo.
 
 ## Not currently implemented as verified firmware features
 
-- Battery-voltage awareness is not implemented.
+- Battery-voltage awareness is implemented in firmware but disabled by default until the optional divider hardware is installed, mapped to a verified ADC pin, and calibrated.
 - Servo-jam detection is not implemented.
-- A dedicated watchdog or self-recovery policy is not documented as implemented behavior.
+- Remote mode commands are not implemented; the current MQTT and Home Assistant path is read-only state telemetry.
 - Hardware-in-the-loop validation is not part of the current repo workflow.
 - LittleFS is no longer auto-formatted on mount failure; a storage fault now leaves logging disabled until the filesystem is repaired deliberately.
 
@@ -39,6 +45,7 @@ Use this file to prevent over-trusting the controller during deployment planning
 - Treat the current system as safe by simple architecture and conservative operating policy, not by full fault-tolerant automation.
 - The independent direct-solar fan remains valuable because it still provides heat-response airflow if the controller layer is down.
 - The future 12 V backbone is not currently integrated with the live 5 V controller hardware.
+- Battery percentage is only meaningful when the monitor path is physically wired, enabled, and calibrated.
 
 ## Intended safe-policy targets
 
@@ -46,11 +53,11 @@ These are design intentions documented in the repo. They should not be treated a
 
 - If the main air sensor is unavailable, default to a conservative day-open and night-closed vent policy.
 - If the water-temperature probe fails, continue greenhouse operation without thermal-mass logic.
-- If battery monitoring is added later, shed non-critical loads before sacrificing the controller.
+- If battery monitoring is enabled later with real hardware, shed non-critical loads before sacrificing the controller.
 - If jam detection is added later, verify it with real hardware sensing rather than inferred motion alone.
 
 ## Deployment boundary
 
 - USB flashing is the guaranteed update path.
 - OTA remains optional convenience, not a required service path.
-- Before unattended long-duration deployment, battery state awareness, jam handling, and watchdog behavior should be treated as open engineering work rather than implied features.
+- Before unattended long-duration deployment, battery-monitor hardware rollout, jam handling, and hardware-in-the-loop validation should still be treated as open engineering work.

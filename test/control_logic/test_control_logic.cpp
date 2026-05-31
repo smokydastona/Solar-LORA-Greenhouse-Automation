@@ -327,6 +327,55 @@ void test_grow_light_stays_off_without_time_even_when_dark() {
   TEST_ASSERT_FALSE(actual.growLightOn);
 }
 
+void test_metrics_compute_vpd_and_dew_point_for_valid_air_data() {
+  GreenhouseLogic::SensorSnapshot snapshot{};
+  snapshot.airAvailable = true;
+  snapshot.airTempC = 24.0F;
+  snapshot.humidityPct = 70.0F;
+
+  const auto metrics = GreenhouseLogic::evaluateMetrics(snapshot, GreenhouseLogic::CropProfileId::tomato);
+
+  TEST_ASSERT_TRUE(metrics.vpdAvailable);
+  TEST_ASSERT_TRUE(metrics.dewPointAvailable);
+  TEST_ASSERT_FLOAT_WITHIN(0.05F, 0.90F, metrics.vaporPressureDeficitKPa);
+  TEST_ASSERT_FLOAT_WITHIN(0.2F, 18.2F, metrics.dewPointC);
+}
+
+void test_frost_risk_triggers_for_near_freezing_air_conditions() {
+  GreenhouseLogic::SensorSnapshot snapshot{};
+  snapshot.airAvailable = true;
+  snapshot.airTempC = 1.0F;
+  snapshot.humidityPct = 95.0F;
+
+  const auto metrics = GreenhouseLogic::evaluateMetrics(snapshot, GreenhouseLogic::CropProfileId::lettuce);
+
+  TEST_ASSERT_TRUE(metrics.frostRisk);
+}
+
+void test_tomato_profile_reports_optimal_conditions() {
+  GreenhouseLogic::SensorSnapshot snapshot{};
+  snapshot.airAvailable = true;
+  snapshot.airTempC = 24.0F;
+  snapshot.humidityPct = 70.0F;
+
+  const auto metrics = GreenhouseLogic::evaluateMetrics(snapshot, GreenhouseLogic::CropProfileId::tomato);
+
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseLogic::CropStatus::optimal),
+                          static_cast<uint8_t>(metrics.cropStatus));
+}
+
+void test_lettuce_profile_reports_stressed_conditions_when_too_hot() {
+  GreenhouseLogic::SensorSnapshot snapshot{};
+  snapshot.airAvailable = true;
+  snapshot.airTempC = 30.0F;
+  snapshot.humidityPct = 40.0F;
+
+  const auto metrics = GreenhouseLogic::evaluateMetrics(snapshot, GreenhouseLogic::CropProfileId::lettuce);
+
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(GreenhouseLogic::CropStatus::stressed),
+                          static_cast<uint8_t>(metrics.cropStatus));
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -354,5 +403,9 @@ int main(int argc, char **argv) {
   RUN_TEST(test_grow_light_stays_off_at_exact_lux_threshold);
   RUN_TEST(test_grow_light_stays_off_outside_lighting_window_even_when_dark);
   RUN_TEST(test_grow_light_stays_off_without_time_even_when_dark);
+  RUN_TEST(test_metrics_compute_vpd_and_dew_point_for_valid_air_data);
+  RUN_TEST(test_frost_risk_triggers_for_near_freezing_air_conditions);
+  RUN_TEST(test_tomato_profile_reports_optimal_conditions);
+  RUN_TEST(test_lettuce_profile_reports_stressed_conditions_when_too_hot);
   return UNITY_END();
 }

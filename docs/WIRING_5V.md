@@ -24,6 +24,8 @@ Reference diagram: [5 V summer architecture](./diagrams/greenhouse-5v-summer-arc
 | Force-close button | GPIO 33 |
 | Status LED | GPIO 35 onboard LED |
 
+Battery-voltage monitoring is software-ready but intentionally unassigned in the default pin map until a verified ADC-safe divider path is installed on the real board.
+
 ## Controller electrical topology
 
 ```text
@@ -194,6 +196,8 @@ LM2596 ground output
 
 - Do not power servos from the ESP32 USB pin.
 - Do not leave any load branch without a common ground reference back to the controller.
+- Do not connect the power-bank output or any raw battery rail directly to an ESP32 ADC pin.
+- If battery monitoring is added, use a resistor divider sized for the highest possible monitored voltage and verify the divider with a meter before enabling the feature in firmware.
 - Keep the controller box dry and the power bank replaceable.
 - Label the load branches physically once wired.
 - Use 18 AWG for any branch that actually carries actuator or fan current.

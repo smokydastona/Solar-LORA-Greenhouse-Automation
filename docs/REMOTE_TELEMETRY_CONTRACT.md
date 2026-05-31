@@ -1,0 +1,223 @@
+# Remote Telemetry Contract
+
+This document defines the current remote telemetry surface implemented by the greenhouse controller firmware.
+
+It exists so dashboards, Home Assistant, and any future LoRa or cloud bridge can target a stable state model instead of reverse-engineering ad hoc serial output.
+
+## Transport
+
+- Transport: MQTT over Wi-Fi
+- MQTT client library: PubSubClient
+- State publishing: retained JSON payloads
+- Availability: retained `online` or `offline` topic
+- Home Assistant integration: MQTT discovery payloads published automatically on broker connection when enabled
+
+## Configuration surface
+
+MQTT is disabled by default.
+
+Enable and configure it in [../include/Settings.h](../include/Settings.h) under `Settings::MQTT`.
+
+Relevant fields:
+
+- `host`
+- `port`
+- `username`
+- `password`
+- `clientId`
+- `baseTopic`
+- `discoveryPrefix`
+- `enableHomeAssistantDiscovery`
+- `publishIntervalMs`
+
+## Topics
+
+Assuming the default `baseTopic` is `greenhouse/mini`:
+
+| Topic | Purpose |
+| --- | --- |
+| `greenhouse/mini/state` | retained full-controller JSON state |
+| `greenhouse/mini/availability` | retained availability state: `online` or `offline` |
+
+If Home Assistant discovery is enabled, the firmware also publishes retained config payloads under:
+
+- `homeassistant/sensor/.../config`
+- `homeassistant/binary_sensor/.../config`
+
+## State payload
+
+The current state topic publishes a retained JSON document shaped like this:
+
+```json
+{
+  "mode": "AUTO",
+  "safe_mode": {
+    "active": false,
+    "reason": "NONE",
+    "boot_failures": 0
+  },
+  "reset_reason": "POWERON",
+  "crop": {
+    "profile": "Tomatoes",
+    "status": "OPTIMAL"
+  },
+  "air": {
+    "available": true,
+    "temp_c": 24.1,
+    "humidity_pct": 70.0
+  },
+  "water": {
+    "available": false,
+    "temp_c": 0.0
+  },
+  "light": {
+    "available": true,
+    "lux": 14820.0
+  },
+  "metrics": {
+    "vpd_kpa": 0.89,
+    "dew_point_c": 18.2,
+    "frost_risk": false
+  },
+  "battery": {
+    "available": false,
+    "voltage_v": 0.0,
+    "percent": 0,
+    "low": false,
+    "critical": false
+  },
+  "health": {
+    "score": 100
+  },
+  "actuators": {
+    "top_open": false,
+    "bottom_open": false,
+    "fan_exhaust": false,
+    "fan_intake": false,
+    "defogger": false,
+    "grow_light": false,
+    "circulation": false
+  },
+  "connectivity": {
+    "wifi": true,
+    "mqtt": true,
+    "ota": false
+  },
+  "storage": {
+    "filesystem_ready": true
+  },
+  "uptime_ms": 123456
+}
+```
+
+## Field semantics
+
+### `mode`
+
+- `AUTO`
+- `OPEN`
+- `CLOSED`
+- `SAFE`
+
+### `safe_mode`
+
+- `active`: whether the controller is suppressing all outputs and holding a conservative state
+- `reason`: `NONE`, `MANUAL`, or `BOOT`
+- `boot_failures`: consecutive pending-boot count observed by the preferences-backed boot policy
+
+### `reset_reason`
+
+Maps directly to ESP32 reset categories such as:
+
+- `POWERON`
+- `SOFTWARE`
+- `PANIC`
+- `TASK_WDT`
+- `BROWNOUT`
+
+### `crop`
+
+- `profile`: selected crop profile label
+- `status`: `OPTIMAL`, `ACCEPTABLE`, `STRESSED`, or `UNAVAILABLE`
+
+### `metrics`
+
+- `vpd_kpa`: vapor pressure deficit in kilopascals
+- `dew_point_c`: dew point in Celsius
+- `frost_risk`: conservative boolean frost-warning signal
+
+### `battery`
+
+Battery values only become meaningful when the optional voltage divider hardware is installed and enabled in settings.
+
+Until then:
+
+- `available` remains `false`
+- voltage and percent are placeholders for the disabled monitor path and should not be treated as live battery truth
+
+### `health`
+
+`score` is a simple controller-health heuristic based on sensor availability, filesystem readiness, safe mode, battery state, and expected connectivity.
+
+It is intended as an operator summary, not a formal reliability metric.
+
+## Home Assistant discovery entities
+
+When discovery is enabled, the firmware currently publishes discovery for:
+
+- air temperature
+- humidity
+- VPD
+- dew point
+- battery percentage
+- health score
+- crop status
+- frost risk
+
+The current integration is read-only. It does not yet accept mode changes or remote actuator commands.
+
+## Remote dashboard minimum viable layout
+
+Any dashboard consuming this contract should, at minimum, expose:
+
+### Overview
+
+- mode
+- safe mode state and reason
+- health score
+- reset reason
+
+### Environment
+
+- air temperature
+- humidity
+- VPD
+- dew point
+- frost risk
+- crop profile and crop status
+
+### Power
+
+- battery percent
+- battery voltage
+- low or critical battery flags
+
+### Actuation
+
+- vent positions
+- fan states
+- defogger state
+- grow light state
+- circulation state
+
+### Diagnostics
+
+- Wi-Fi state
+- MQTT state
+- OTA enabled state
+- filesystem readiness
+- uptime
+
+## Compatibility rule
+
+If this payload shape changes in a future commit, the corresponding change set should update this document in the same commit.
