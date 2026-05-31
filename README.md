@@ -92,6 +92,9 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - [docs/dashboards.md](./docs/dashboards.md): dashboard guidance and starter Home Assistant and Grafana artifacts
 - [docs/versioning.md](./docs/versioning.md): release and versioning rules for firmware, docs, and telemetry
 - [docs/power-telemetry-roadmap.md](./docs/power-telemetry-roadmap.md): staged plan for serious solar and battery telemetry
+- [docs/known-issues.md](./docs/known-issues.md): short public list of the most important current deployment gaps
+- [docs/firmware-update.md](./docs/firmware-update.md): supported update and recovery procedure
+- [docs/winterization.md](./docs/winterization.md): focused cold-weather preparation checklist
 
 ## What Is In This Repository
 
@@ -111,6 +114,9 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - Dashboard integration guidance and starter configs in [docs/dashboards.md](./docs/dashboards.md)
 - Versioning and release-note policy in [docs/versioning.md](./docs/versioning.md)
 - Versioned release history in [CHANGELOG.md](./CHANGELOG.md)
+- Public known deployment issues in [docs/known-issues.md](./docs/known-issues.md)
+- Firmware update procedure in [docs/firmware-update.md](./docs/firmware-update.md)
+- Winter preparation checklist in [docs/winterization.md](./docs/winterization.md)
 
 ## GitHub Automation
 

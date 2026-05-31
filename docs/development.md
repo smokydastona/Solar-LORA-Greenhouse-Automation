@@ -50,6 +50,7 @@ Still missing or incomplete:
 - rollback firmware path
 - Docker development environment
 - richer release workflow and release automation beyond the new changelog discipline
+- hardware revision notes and explicit board-revision tracking
 
 ## Versioning And Release Notes
 

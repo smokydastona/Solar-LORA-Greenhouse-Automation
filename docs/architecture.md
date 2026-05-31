@@ -82,3 +82,4 @@ Not yet complete to a full off-grid fleet standard:
 - [installation.md](./installation.md)
 - [api.md](./api.md)
 - [ARCHITECTURE_INDEX.md](./ARCHITECTURE_INDEX.md)
+- [known-issues.md](./known-issues.md)

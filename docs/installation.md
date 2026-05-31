@@ -40,6 +40,18 @@ For the detailed staged build sequence, use [BUILD_GUIDE_5V.md](./BUILD_GUIDE_5V
 - if battery monitoring is enabled, compare the reading with a multimeter before trusting percentage
 - if MQTT is enabled, verify state publishing and Home Assistant discovery against the real broker
 
+## Pre-Power Wiring Verification Checklist
+
+Before first power-on after wiring or rewiring:
+
+- confirm servo power is not being drawn from the ESP32 USB pin
+- confirm all grounds that must be common are actually common
+- confirm no reserved board pins were repurposed accidentally
+- confirm DHT22 data is not being over-driven by a 5 V-only breakout without a logic-safe arrangement
+- confirm MOSFET modules are wired with the intended branch polarity
+- confirm no raw battery or panel voltage is connected directly to an ESP32 GPIO
+- confirm fuse placement matches the intended branch layout before energizing higher-current paths
+
 ## 6. Field Deployment Rules
 
 - do not power servos from the board USB pin
@@ -52,3 +64,5 @@ For the detailed staged build sequence, use [BUILD_GUIDE_5V.md](./BUILD_GUIDE_5V
 - [WIRING_5V.md](./WIRING_5V.md)
 - [troubleshooting.md](./troubleshooting.md)
 - [BUILD_GUIDE_5V.md](./BUILD_GUIDE_5V.md)
+- [firmware-update.md](./firmware-update.md)
+- [winterization.md](./winterization.md)
