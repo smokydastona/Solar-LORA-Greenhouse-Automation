@@ -80,6 +80,21 @@ inline bool inGrowLightWindow(const ClimateConfig &climate, bool hasTime, uint32
   return hasTime && currentMinute >= climate.growLightStartMinutes && currentMinute < climate.growLightStopMinutes;
 }
 
+inline bool resolveDaylight(const SensorSnapshot &snapshot,
+                           const ClimateConfig &climate,
+                           bool hasTime,
+                           uint32_t currentMinute) {
+  if (snapshot.lightAvailable) {
+    return snapshot.lightLux >= climate.growLightLuxThreshold;
+  }
+
+  if (hasTime) {
+    return inGrowLightWindow(climate, hasTime, currentMinute);
+  }
+
+  return true;
+}
+
 inline ActuatorState evaluateActuators(const EvaluationContext &ctx) {
   ActuatorState actuators = ctx.previousActuators;
 

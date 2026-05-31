@@ -21,6 +21,7 @@ Use this file to prevent over-trusting the controller during deployment planning
 ## Host-side control-logic coverage now present
 
 - Host-side tests cover mode cycling behavior.
+- Host-side tests cover the day/night resolver path, including light-sensor precedence, schedule fallback, and no-time fallback.
 - Host-side tests cover forced-open and forced-closed output behavior.
 - Host-side tests cover vent hysteresis retention between open and close thresholds.
 - Host-side tests cover fan hysteresis retention between on and off thresholds.

@@ -51,6 +51,38 @@ void test_mode_cycle_wraps_in_expected_order() {
                           static_cast<uint8_t>(GreenhouseLogic::nextMode(GreenhouseLogic::ControlMode::forceClosed)));
 }
 
+void test_daylight_resolver_uses_light_sensor_when_available() {
+  auto ctx = baseContext();
+  ctx.snapshot.lightAvailable = true;
+  ctx.snapshot.lightLux = 15000.0F;
+  ctx.currentMinute = 23U * 60U;
+
+  TEST_ASSERT_TRUE(GreenhouseLogic::resolveDaylight(ctx.snapshot, ctx.climate, true, ctx.currentMinute));
+
+  ctx.snapshot.lightLux = 1000.0F;
+
+  TEST_ASSERT_FALSE(GreenhouseLogic::resolveDaylight(ctx.snapshot, ctx.climate, true, ctx.currentMinute));
+}
+
+void test_daylight_resolver_falls_back_to_schedule_when_light_sensor_is_unavailable() {
+  auto ctx = baseContext();
+  ctx.snapshot.lightAvailable = false;
+  ctx.currentMinute = 9U * 60U;
+
+  TEST_ASSERT_TRUE(GreenhouseLogic::resolveDaylight(ctx.snapshot, ctx.climate, true, ctx.currentMinute));
+
+  ctx.currentMinute = 20U * 60U;
+
+  TEST_ASSERT_FALSE(GreenhouseLogic::resolveDaylight(ctx.snapshot, ctx.climate, true, ctx.currentMinute));
+}
+
+void test_daylight_resolver_defaults_to_day_when_no_light_sensor_or_time_is_available() {
+  auto ctx = baseContext();
+  ctx.snapshot.lightAvailable = false;
+
+  TEST_ASSERT_TRUE(GreenhouseLogic::resolveDaylight(ctx.snapshot, ctx.climate, false, 0U));
+}
+
 void test_force_open_turns_on_venting_and_disables_heat_and_light() {
   auto ctx = baseContext();
   ctx.mode = GreenhouseLogic::ControlMode::forceOpen;
@@ -313,6 +345,9 @@ void test_grow_light_stays_off_without_time_even_when_dark() {
 int main(int argc, char **argv) {
   UNITY_BEGIN();
   RUN_TEST(test_mode_cycle_wraps_in_expected_order);
+  RUN_TEST(test_daylight_resolver_uses_light_sensor_when_available);
+  RUN_TEST(test_daylight_resolver_falls_back_to_schedule_when_light_sensor_is_unavailable);
+  RUN_TEST(test_daylight_resolver_defaults_to_day_when_no_light_sensor_or_time_is_available);
   RUN_TEST(test_force_open_turns_on_venting_and_disables_heat_and_light);
   RUN_TEST(test_force_closed_turns_everything_off);
   RUN_TEST(test_vents_stay_open_between_open_and_close_thresholds_when_previously_open);

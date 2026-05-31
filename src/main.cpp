@@ -261,17 +261,6 @@ class GreenhouseController {
     return result;
   }
 
-  bool isDaylight(bool hasTime, uint32_t currentMinute) const {
-    if (snapshot_.lightAvailable) {
-      return snapshot_.lightLux >= Settings::CLIMATE.growLightLuxThreshold;
-    }
-    if (hasTime) {
-      return currentMinute >= Settings::CLIMATE.growLightStartMinutes &&
-             currentMinute < Settings::CLIMATE.growLightStopMinutes;
-    }
-    return true;
-  }
-
   bool currentLocalTime(struct tm *timeInfo) const {
     return getLocalTime(timeInfo, 10);
   }
@@ -280,7 +269,6 @@ class GreenhouseController {
     struct tm timeInfo {};
     const bool hasTime = currentLocalTime(&timeInfo);
     const uint32_t currentMinute = hasTime ? static_cast<uint32_t>(timeInfo.tm_hour * 60U + timeInfo.tm_min) : 0U;
-    const bool daylight = isDaylight(hasTime, currentMinute);
 
     const GreenhouseLogic::ClimateConfig climateConfig{
         Settings::CLIMATE.ventOpenTempC,
@@ -297,6 +285,8 @@ class GreenhouseController {
         Settings::CLIMATE.growLightStopMinutes,
         Settings::CLIMATE.growLightLuxThreshold,
     };
+
+      const bool daylight = GreenhouseLogic::resolveDaylight(snapshot_, climateConfig, hasTime, currentMinute);
 
     const GreenhouseLogic::SystemConfig systemConfig{
         Settings::SYSTEM.enableDefogger,
