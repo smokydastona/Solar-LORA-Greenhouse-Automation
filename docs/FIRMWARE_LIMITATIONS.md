@@ -23,6 +23,8 @@ Use this file to prevent over-trusting the controller during deployment planning
 - Host-side tests cover mode cycling behavior.
 - Host-side tests cover forced-open and forced-closed output behavior.
 - Host-side tests cover the conservative main air-sensor fallback behavior.
+- Host-side tests cover defogger night gating and heater off-threshold behavior.
+- Host-side tests cover grow-light schedule and lux-threshold edge cases.
 - These tests validate the shared control-decision function, not the full board-level hardware stack.
 
 ## Safe operating interpretation

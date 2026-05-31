@@ -131,6 +131,79 @@ void test_grow_light_uses_schedule_and_lux_threshold() {
   TEST_ASSERT_TRUE(actual.growLightOn);
 }
 
+void test_defogger_turns_on_only_during_cold_night_conditions() {
+  auto ctx = baseContext();
+  ctx.daylight = false;
+  ctx.snapshot.airTempC = 4.0F;
+  ctx.snapshot.humidityPct = 65.0F;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_TRUE(actual.defoggerOn);
+}
+
+void test_defogger_stays_off_during_day_even_if_air_is_cold() {
+  auto ctx = baseContext();
+  ctx.daylight = true;
+  ctx.snapshot.airTempC = 2.0F;
+  ctx.previousActuators.defoggerOn = true;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_FALSE(actual.defoggerOn);
+}
+
+void test_defogger_uses_off_threshold_to_drop_out_on_warmer_night() {
+  auto ctx = baseContext();
+  ctx.daylight = false;
+  ctx.snapshot.airTempC = 8.5F;
+  ctx.previousActuators.defoggerOn = true;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_FALSE(actual.defoggerOn);
+}
+
+void test_grow_light_stays_off_at_exact_lux_threshold() {
+  auto ctx = baseContext();
+  ctx.snapshot.airTempC = 20.0F;
+  ctx.snapshot.humidityPct = 50.0F;
+  ctx.snapshot.lightAvailable = true;
+  ctx.snapshot.lightLux = ctx.climate.growLightLuxThreshold;
+  ctx.currentMinute = 9U * 60U;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_FALSE(actual.growLightOn);
+}
+
+void test_grow_light_stays_off_outside_lighting_window_even_when_dark() {
+  auto ctx = baseContext();
+  ctx.snapshot.airTempC = 20.0F;
+  ctx.snapshot.humidityPct = 50.0F;
+  ctx.snapshot.lightAvailable = true;
+  ctx.snapshot.lightLux = 1000.0F;
+  ctx.currentMinute = ctx.climate.growLightStopMinutes;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_FALSE(actual.growLightOn);
+}
+
+void test_grow_light_stays_off_without_time_even_when_dark() {
+  auto ctx = baseContext();
+  ctx.snapshot.airTempC = 20.0F;
+  ctx.snapshot.humidityPct = 50.0F;
+  ctx.snapshot.lightAvailable = true;
+  ctx.snapshot.lightLux = 1000.0F;
+  ctx.hasTime = false;
+  ctx.currentMinute = 0U;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_FALSE(actual.growLightOn);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -141,5 +214,11 @@ int main(int argc, char **argv) {
   RUN_TEST(test_sensor_failure_daytime_opens_vents_and_turns_off_climate_outputs);
   RUN_TEST(test_sensor_failure_night_closes_vents_and_turns_off_climate_outputs);
   RUN_TEST(test_grow_light_uses_schedule_and_lux_threshold);
+  RUN_TEST(test_defogger_turns_on_only_during_cold_night_conditions);
+  RUN_TEST(test_defogger_stays_off_during_day_even_if_air_is_cold);
+  RUN_TEST(test_defogger_uses_off_threshold_to_drop_out_on_warmer_night);
+  RUN_TEST(test_grow_light_stays_off_at_exact_lux_threshold);
+  RUN_TEST(test_grow_light_stays_off_outside_lighting_window_even_when_dark);
+  RUN_TEST(test_grow_light_stays_off_without_time_even_when_dark);
   return UNITY_END();
 }
