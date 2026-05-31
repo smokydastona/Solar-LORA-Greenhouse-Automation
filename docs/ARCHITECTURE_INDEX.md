@@ -33,5 +33,5 @@ These are the only greenhouse architecture diagrams that should be treated as cu
 - For current implementation limits, read [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) before assuming a safety or recovery feature exists in live firmware.
 - For the prioritized path toward a more professional deployment and open-source package, read [PROFESSIONALIZATION_ROADMAP.md](./PROFESSIONALIZATION_ROADMAP.md).
 - For contributor workflow and change impact rules, read [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md).
-- For field-failure triage and bench debugging, read [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
+- For field-failure triage and bench debugging, read [troubleshooting.md](./troubleshooting.md).
 - For MQTT, Home Assistant, and dashboard payload structure, read [REMOTE_TELEMETRY_CONTRACT.md](./REMOTE_TELEMETRY_CONTRACT.md).

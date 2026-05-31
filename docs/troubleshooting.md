@@ -1,5 +1,7 @@
 # Troubleshooting Guide
 
+This document is the standard troubleshooting entry point for the project.
+
 This guide covers the most likely field and bench issues for the current 5 V greenhouse controller build.
 
 It assumes the current repo boundary: ESP32-S3 controller, local display, local logging, dual vent servos, and optional Wi-Fi OTA.
@@ -195,3 +197,4 @@ Do not continue unattended operation if any of these are true:
 - [WIRING_5V.md](./WIRING_5V.md)
 - [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md)
 - [SAFETY_MODEL.md](./SAFETY_MODEL.md)
+- [installation.md](./installation.md)
