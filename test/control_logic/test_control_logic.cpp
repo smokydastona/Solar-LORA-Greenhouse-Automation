@@ -82,6 +82,58 @@ void test_force_closed_turns_everything_off() {
   TEST_ASSERT_FALSE(actual.growLightOn);
 }
 
+void test_vents_stay_open_between_open_and_close_thresholds_when_previously_open() {
+  auto ctx = baseContext();
+  ctx.snapshot.airTempC = 25.0F;
+  ctx.snapshot.humidityPct = 60.0F;
+  ctx.previousActuators.topVentOpen = true;
+  ctx.previousActuators.bottomVentOpen = true;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_TRUE(actual.topVentOpen);
+  TEST_ASSERT_TRUE(actual.bottomVentOpen);
+}
+
+void test_vents_stay_closed_between_open_and_close_thresholds_when_previously_closed() {
+  auto ctx = baseContext();
+  ctx.snapshot.airTempC = 25.0F;
+  ctx.snapshot.humidityPct = 60.0F;
+  ctx.previousActuators.topVentOpen = false;
+  ctx.previousActuators.bottomVentOpen = false;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_FALSE(actual.topVentOpen);
+  TEST_ASSERT_FALSE(actual.bottomVentOpen);
+}
+
+void test_fans_stay_on_between_fan_on_and_fan_off_thresholds_when_previously_on() {
+  auto ctx = baseContext();
+  ctx.snapshot.airTempC = 26.0F;
+  ctx.snapshot.humidityPct = 76.0F;
+  ctx.previousActuators.exhaustFanOn = true;
+  ctx.previousActuators.intakeFanOn = true;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_TRUE(actual.exhaustFanOn);
+  TEST_ASSERT_TRUE(actual.intakeFanOn);
+}
+
+void test_fans_stay_off_between_fan_on_and_fan_off_thresholds_when_previously_off() {
+  auto ctx = baseContext();
+  ctx.snapshot.airTempC = 26.0F;
+  ctx.snapshot.humidityPct = 76.0F;
+  ctx.previousActuators.exhaustFanOn = false;
+  ctx.previousActuators.intakeFanOn = false;
+
+  const auto actual = GreenhouseLogic::evaluateActuators(ctx);
+
+  TEST_ASSERT_FALSE(actual.exhaustFanOn);
+  TEST_ASSERT_FALSE(actual.intakeFanOn);
+}
+
 void test_sensor_failure_daytime_opens_vents_and_turns_off_climate_outputs() {
   auto ctx = baseContext();
   ctx.snapshot.airAvailable = false;
@@ -211,6 +263,10 @@ int main(int argc, char **argv) {
   RUN_TEST(test_mode_cycle_wraps_in_expected_order);
   RUN_TEST(test_force_open_turns_on_venting_and_disables_heat_and_light);
   RUN_TEST(test_force_closed_turns_everything_off);
+  RUN_TEST(test_vents_stay_open_between_open_and_close_thresholds_when_previously_open);
+  RUN_TEST(test_vents_stay_closed_between_open_and_close_thresholds_when_previously_closed);
+  RUN_TEST(test_fans_stay_on_between_fan_on_and_fan_off_thresholds_when_previously_on);
+  RUN_TEST(test_fans_stay_off_between_fan_on_and_fan_off_thresholds_when_previously_off);
   RUN_TEST(test_sensor_failure_daytime_opens_vents_and_turns_off_climate_outputs);
   RUN_TEST(test_sensor_failure_night_closes_vents_and_turns_off_climate_outputs);
   RUN_TEST(test_grow_light_uses_schedule_and_lux_threshold);
