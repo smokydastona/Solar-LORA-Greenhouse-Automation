@@ -48,9 +48,9 @@ This is the build sequence for the complete first-generation controller system i
 
 ### Optional reliability and telemetry add-ons
 
-1. If you want battery-voltage monitoring, add a safe resistor-divider path from the monitored DC rail to an ADC-capable ESP32-S3 pin.
-2. Do not connect any battery or 5 V rail directly to an ESP32 GPIO.
-3. Leave the battery monitor disabled in [../include/Settings.h](../include/Settings.h) until the divider, scaling ratio, and target ADC pin are confirmed on your actual board.
+1. This Heltec-style SX1262 LoRa V3 board exposes an onboard battery-read path: `VBAT_Read` on GPIO 1 with `ADC_Ctrl` on GPIO 37.
+2. Do not connect any battery or 5 V rail directly to an ESP32 GPIO; use the board's own battery-read circuit for this target board.
+3. Verify the reported battery voltage against a multimeter on the real battery terminals and trim the calibration offset in [../include/Settings.h](../include/Settings.h) if needed.
 4. If you want MQTT or Home Assistant telemetry, configure the broker settings in [../include/Settings.h](../include/Settings.h) before commissioning.
 
 ### Fuller upgrade path
@@ -136,7 +136,7 @@ This is the build sequence for the complete first-generation controller system i
 6. Simulate main air-sensor loss and verify the controller falls back conservatively instead of continuing the last blind climate state.
 7. Check that a log file appears on LittleFS and includes the `*_available` columns for each optional sensor.
 8. Let the system run for at least one day before changing thresholds.
-9. If battery monitoring is enabled, verify the reported voltage against a multimeter before trusting the percentage value.
+9. Verify the reported battery voltage against a multimeter before trusting the percentage value.
 10. If MQTT is enabled, verify that the retained state topic and Home Assistant discovery entities appear as expected.
 
 ## Safe-mode and recovery behavior

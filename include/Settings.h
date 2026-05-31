@@ -115,15 +115,15 @@ constexpr ReliabilityConfig RELIABILITY{
 };
 
 constexpr BatteryMonitorConfig BATTERY{
-  false,
-  -1,
-  2.0F,
+  true,
+  1,
+  4.9F * 1.045F,
   0.0F,
   3.45F,
   3.30F,
   4.20F,
   3.20F,
-  8,
+  16,
 };
 
 constexpr MqttConfig MQTT{

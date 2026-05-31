@@ -41,6 +41,7 @@ The implementation is based on the full greenhouse planning conversation capture
 - Safe-mode boot after repeated failed boots or by holding both override buttons during startup
 - ESP32 task-watchdog and application-progress watchdog recovery policy
 - VPD, dew point, frost risk, crop profile evaluation, and crop-status interpretation
+- Heltec onboard battery-voltage sensing on the board's `VBAT_Read` path
 - Optional MQTT publishing with Home Assistant discovery payloads
 
 ## Quick start

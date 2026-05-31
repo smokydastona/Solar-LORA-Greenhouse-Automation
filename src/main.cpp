@@ -216,6 +216,8 @@ class GreenhouseController {
   }
 
   void initSensors() {
+    initBatteryMonitor();
+
     if (Settings::SYSTEM.enableBme280) {
       bmeReady_ = bme_.begin(Settings::BME280_I2C_ADDRESS, &Wire);
     }
@@ -308,6 +310,15 @@ class GreenhouseController {
     esp_task_wdt_init((Settings::RELIABILITY.hardwareWatchdogTimeoutMs + 999UL) / 1000UL, true);
 #endif
     esp_task_wdt_add(nullptr);
+  }
+
+  void initBatteryMonitor() {
+    if (!Settings::BATTERY.enableVoltageMonitor) {
+      return;
+    }
+
+    pinMode(PinMap::BATTERY_ADC_CTRL, OUTPUT);
+    digitalWrite(PinMap::BATTERY_ADC_CTRL, HIGH);
   }
 
   void initWifi() {
@@ -693,10 +704,12 @@ class GreenhouseController {
       return state;
     }
 
+    batteryAdcEnable();
     uint32_t totalMilliVolts = 0;
     for (uint8_t index = 0; index < Settings::BATTERY.samplesPerRead; ++index) {
       totalMilliVolts += static_cast<uint32_t>(analogReadMilliVolts(pin));
     }
+    batteryAdcDisable();
 
     const float measuredV = (static_cast<float>(totalMilliVolts) /
                              static_cast<float>(Settings::BATTERY.samplesPerRead)) /
@@ -714,6 +727,15 @@ class GreenhouseController {
     state.low = state.voltageV <= Settings::BATTERY.lowVoltage;
     state.critical = state.voltageV <= Settings::BATTERY.criticalVoltage;
     return state;
+  }
+
+  void batteryAdcEnable() {
+    digitalWrite(PinMap::BATTERY_ADC_CTRL, LOW);
+    delay(10);
+  }
+
+  void batteryAdcDisable() {
+    digitalWrite(PinMap::BATTERY_ADC_CTRL, HIGH);
   }
 
   int computeHealthScore() const {

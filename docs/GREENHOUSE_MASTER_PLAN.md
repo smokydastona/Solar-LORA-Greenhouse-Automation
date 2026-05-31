@@ -115,7 +115,7 @@ The first-generation automation system is split into two layers.
 - ESP32 task-watchdog and application-progress watchdog recovery are now implemented.
 - VPD, dew point, frost-risk, and crop-profile interpretation are now implemented.
 - Optional MQTT publishing and Home Assistant discovery are now implemented for remote telemetry consumers.
-- Battery-voltage awareness is implemented in firmware but remains hardware-dependent and disabled by default until an ADC divider path is installed and calibrated.
+- Battery-voltage awareness is implemented against the Heltec board's onboard `VBAT_Read` and `ADC_Ctrl` path and still requires on-device calibration confirmation before the reading should be trusted operationally.
 - Servo-jam detection is still not implemented.
 
 See [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) for the explicit boundary between implemented behavior and documented design targets.

@@ -24,7 +24,7 @@ Reference diagram: [5 V summer architecture](./diagrams/greenhouse-5v-summer-arc
 | Force-close button | GPIO 33 |
 | Status LED | GPIO 35 onboard LED |
 
-Battery-voltage monitoring is software-ready but intentionally unassigned in the default pin map until a verified ADC-safe divider path is installed on the real board.
+Battery-voltage monitoring now uses the Heltec board's onboard battery-read path: `VBAT_Read` on GPIO 1 and `ADC_Ctrl` on GPIO 37.
 
 ## Controller electrical topology
 
@@ -197,7 +197,8 @@ LM2596 ground output
 - Do not power servos from the ESP32 USB pin.
 - Do not leave any load branch without a common ground reference back to the controller.
 - Do not connect the power-bank output or any raw battery rail directly to an ESP32 ADC pin.
-- If battery monitoring is added, use a resistor divider sized for the highest possible monitored voltage and verify the divider with a meter before enabling the feature in firmware.
+- For this board family, use the onboard battery-read path rather than adding a second direct battery wire to an ESP32 ADC input.
+- Verify the reported battery voltage against a meter on the real battery before trusting the percentage mapping.
 - Keep the controller box dry and the power bank replaceable.
 - Label the load branches physically once wired.
 - Use 18 AWG for any branch that actually carries actuator or fan current.
