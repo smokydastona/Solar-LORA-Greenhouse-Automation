@@ -59,11 +59,20 @@ This is the build sequence for the complete first-generation controller system i
 2. Power the servos from a dedicated 5 V rail sourced from the power bank, not from the ESP32 USB pin.
 3. Connect both servo grounds to the common ground bus.
 4. Connect each servo signal wire to its configured GPIO.
-5. Verify both vents move between fully closed and fully open positions.
-6. Start with the bought SG90 servos as the current owned-hardware path.
-7. The default servo angles in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) are now deliberately reduced-travel SG90 bench-test values so first power-up stays conservative.
-8. Verify both vents move only through a small safe range first, then expand angles gradually until travel matches the real vent geometry.
-9. If the SG90 units chatter, stall, or cannot hold the vents in wind, treat that as a mechanical limit and move to MG90S-class metal-gear servos.
+
+### Phase A: bench-test travel only
+
+5. Start with the bought SG90 servos as the current owned-hardware path.
+6. Leave the default servo angles in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) at their reduced-travel SG90 bench-test values for the first power-up.
+7. Power the system and verify each servo moves only through a small safe range without binding, slamming, or over-centering the linkage.
+8. Stop immediately if either servo chatters, stalls, draws the linkage into a hard stop, or twists the vent plastic.
+
+### Phase B: final installed travel
+
+9. After the linkage direction and neutral positions are confirmed safe, expand the open and closed angles gradually in small steps until the real vent geometry is reached.
+10. Re-test after each angle change instead of jumping directly to full travel.
+11. Only treat the angles as final after the vents reliably hit the intended open and closed positions without stressing the servo or the greenhouse skin.
+12. If the SG90 units chatter, stall, or cannot hold the vents in wind even after careful tuning, treat that as a mechanical limit and move to MG90S-class metal-gear servos.
 
 ## Stage 4: add switched load outputs
 
