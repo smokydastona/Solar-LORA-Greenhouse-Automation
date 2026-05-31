@@ -31,3 +31,6 @@ These are the only greenhouse architecture diagrams that should be treated as cu
 - For the future winter expansion, start with [GREENHOUSE_MASTER_PLAN.md](./GREENHOUSE_MASTER_PLAN.md), then [WIRING_12V_UPGRADE.md](./WIRING_12V_UPGRADE.md).
 - For the fail-safe behavior and subsystem independence view, read [SAFETY_MODEL.md](./SAFETY_MODEL.md).
 - For current implementation limits, read [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) before assuming a safety or recovery feature exists in live firmware.
+- For the prioritized path toward a more professional deployment and open-source package, read [PROFESSIONALIZATION_ROADMAP.md](./PROFESSIONALIZATION_ROADMAP.md).
+- For contributor workflow and change impact rules, read [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md).
+- For field-failure triage and bench debugging, read [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).

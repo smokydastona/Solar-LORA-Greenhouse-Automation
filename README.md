@@ -15,6 +15,9 @@ The implementation is based on the full greenhouse planning conversation capture
 - A categorized bill of materials in [docs/MATERIALS_LIST.md](./docs/MATERIALS_LIST.md)
 - Seasonal and safety operating guidance in [docs/OPERATIONS_AND_SAFETY.md](./docs/OPERATIONS_AND_SAFETY.md)
 - Explicit implementation boundaries in [docs/FIRMWARE_LIMITATIONS.md](./docs/FIRMWARE_LIMITATIONS.md)
+- A maturity and feature-priority plan in [docs/PROFESSIONALIZATION_ROADMAP.md](./docs/PROFESSIONALIZATION_ROADMAP.md)
+- Contributor workflow guidance in [docs/DEVELOPER_GUIDE.md](./docs/DEVELOPER_GUIDE.md)
+- Field and bench recovery guidance in [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)
 
 ## GitHub automation
 
@@ -67,6 +70,14 @@ The implementation is based on the full greenhouse planning conversation capture
 - Use [docs/ARCHITECTURE_INDEX.md](./docs/ARCHITECTURE_INDEX.md) to determine which diagrams are current and which materials are reference-only.
 - Use [docs/SAFETY_MODEL.md](./docs/SAFETY_MODEL.md) for the one-page view of what remains active if the controller layer fails.
 - Use [docs/FIRMWARE_LIMITATIONS.md](./docs/FIRMWARE_LIMITATIONS.md) before assuming a safety, recovery, or sensor-fallback behavior is already implemented.
+- Use [docs/PROFESSIONALIZATION_ROADMAP.md](./docs/PROFESSIONALIZATION_ROADMAP.md) for the prioritized path from current repo state to a more deployable open-source system.
+- Use [docs/DEVELOPER_GUIDE.md](./docs/DEVELOPER_GUIDE.md) before refactoring firmware, adding telemetry, or changing pin and threshold behavior.
+
+## Maturity stance
+
+- This repo is already strong in system definition, safety boundaries, and build documentation.
+- The biggest remaining professionalization gaps are reliability hardening, power telemetry, plant-state intelligence, remote dashboarding, and integration surfaces such as MQTT or Home Assistant.
+- The share links reviewed for this topic were mostly unrelated controller-remapper and generic ESP32 inspiration material, so the roadmap in this repo is grounded primarily in the greenhouse code and docs that actually exist here.
 
 ## Design boundaries
 
