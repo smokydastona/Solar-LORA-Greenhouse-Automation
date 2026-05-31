@@ -29,4 +29,5 @@ These are the only greenhouse architecture diagrams that should be treated as cu
 
 - For the active build, start with [GREENHOUSE_MASTER_PLAN.md](./GREENHOUSE_MASTER_PLAN.md), then [WIRING_5V.md](./WIRING_5V.md), then [BUILD_GUIDE_5V.md](./BUILD_GUIDE_5V.md).
 - For the future winter expansion, start with [GREENHOUSE_MASTER_PLAN.md](./GREENHOUSE_MASTER_PLAN.md), then [WIRING_12V_UPGRADE.md](./WIRING_12V_UPGRADE.md).
+- For the fail-safe behavior and subsystem independence view, read [SAFETY_MODEL.md](./SAFETY_MODEL.md).
 - For current implementation limits, read [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) before assuming a safety or recovery feature exists in live firmware.

@@ -1,5 +1,7 @@
 # Operations And Safety
 
+See [SAFETY_MODEL.md](./SAFETY_MODEL.md) for the quick reference showing which subsystems remain independent if the controller-backed layer fails.
+
 ## Day-to-day use
 
 - Leave the controller in `AUTO` mode for normal operation.

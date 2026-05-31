@@ -59,6 +59,7 @@ The implementation is based on the full greenhouse planning conversation capture
 ## Canonical references
 
 - Use [docs/ARCHITECTURE_INDEX.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/ARCHITECTURE_INDEX.md) to determine which diagrams are current and which materials are reference-only.
+- Use [docs/SAFETY_MODEL.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/SAFETY_MODEL.md) for the one-page view of what remains active if the controller layer fails.
 - Use [docs/FIRMWARE_LIMITATIONS.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/FIRMWARE_LIMITATIONS.md) before assuming a safety, recovery, or sensor-fallback behavior is already implemented.
 
 ## Design boundaries

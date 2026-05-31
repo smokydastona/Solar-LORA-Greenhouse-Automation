@@ -237,6 +237,8 @@ The 12 V expansion is not the first build step. It is the second-generation wint
 - Battery and power electronics housed in an enclosure
 - One obvious master shutoff for non-technical use
 
+See [SAFETY_MODEL.md](./SAFETY_MODEL.md) for the one-page subsystem-independence and controller-failure view.
+
 ## Project execution order
 
 1. Build the first-generation 5 V controller system and verify vent actuation, sensors, display, and logging.
