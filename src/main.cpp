@@ -10,6 +10,7 @@
 #include <LittleFS.h>
 #include <OneWire.h>
 #include <Preferences.h>
+#include <stdio.h>
 #include <time.h>
 #include <WiFi.h>
 #include <Wire.h>
@@ -108,7 +109,8 @@ class GreenhouseController {
       appendLogRecord();
     }
 
-    if (otaReady_) {
+    if (otaReady_ && now - lastOtaAt_ >= Settings::LOGGING.otaPollIntervalMs) {
+      lastOtaAt_ = now;
       ArduinoOTA.handle();
     }
   }
@@ -129,7 +131,10 @@ class GreenhouseController {
   }
 
   void initFilesystem() {
-    LittleFS.begin(true);
+    filesystemReady_ = LittleFS.begin(false);
+    if (!filesystemReady_) {
+      Serial.println("LittleFS mount failed; leaving logs disabled until storage is repaired.");
+    }
   }
 
   void initSensors() {
@@ -148,7 +153,6 @@ class GreenhouseController {
 
     if (Settings::SYSTEM.enableWaterProbe) {
       waterSensor_.begin();
-      waterSensor_.setWaitForConversion(false);
       waterReady_ = waterSensor_.getDeviceCount() > 0;
     }
   }
@@ -277,7 +281,7 @@ class GreenhouseController {
         actuators_,
         mode_,
       Settings::CLIMATE,
-      Settings::CONTROL_SYSTEM,
+      Settings::controlSystemConfig(),
         daylight,
         hasTime,
         currentMinute,
@@ -285,20 +289,50 @@ class GreenhouseController {
   }
 
   void applyActuatorState() {
+    effectiveActuators_ = actuators_;
+    effectiveActuators_.defoggerOn = Settings::SYSTEM.enableDefogger && effectiveActuators_.defoggerOn;
+    effectiveActuators_.growLightOn = Settings::SYSTEM.enableGrowLight && effectiveActuators_.growLightOn;
+    effectiveActuators_.circulationFansOn = Settings::SYSTEM.enableCirculationFans && effectiveActuators_.circulationFansOn;
+
     topServo_.write(actuators_.topVentOpen ? Settings::SERVOS.topOpenDegrees : Settings::SERVOS.topClosedDegrees);
     bottomServo_.write(actuators_.bottomVentOpen ? Settings::SERVOS.bottomOpenDegrees : Settings::SERVOS.bottomClosedDegrees);
 
     digitalWrite(PinMap::FAN_EXHAUST, actuators_.exhaustFanOn ? HIGH : LOW);
     digitalWrite(PinMap::FAN_INTAKE, actuators_.intakeFanOn ? HIGH : LOW);
-    digitalWrite(PinMap::HEATER_DEFOGGER, Settings::SYSTEM.enableDefogger && actuators_.defoggerOn ? HIGH : LOW);
-    digitalWrite(PinMap::GROW_LIGHT, Settings::SYSTEM.enableGrowLight && actuators_.growLightOn ? HIGH : LOW);
-    digitalWrite(PinMap::CIRCULATION_FANS, Settings::SYSTEM.enableCirculationFans && actuators_.circulationFansOn ? HIGH : LOW);
+    digitalWrite(PinMap::HEATER_DEFOGGER, effectiveActuators_.defoggerOn ? HIGH : LOW);
+    digitalWrite(PinMap::GROW_LIGHT, effectiveActuators_.growLightOn ? HIGH : LOW);
+    digitalWrite(PinMap::CIRCULATION_FANS, effectiveActuators_.circulationFansOn ? HIGH : LOW);
   }
 
   void renderDisplay(bool fullRefresh) {
     if (!displayReady_) {
       return;
     }
+
+    char airBuffer[24];
+    char waterBuffer[16];
+    char lightBuffer[16];
+    char statusBuffer[16];
+    formatMeasurement(airBuffer,
+                      sizeof(airBuffer),
+                      snapshot_.airAvailable,
+                      snapshot_.airTempC,
+                      1,
+                      "C");
+    if (snapshot_.airAvailable) {
+      snprintf(airBuffer,
+               sizeof(airBuffer),
+               "%.1fC %.0f%%",
+               static_cast<double>(snapshot_.airTempC),
+               static_cast<double>(snapshot_.humidityPct));
+    }
+    formatMeasurement(waterBuffer, sizeof(waterBuffer), snapshot_.waterAvailable, snapshot_.waterTempC, 1, "C");
+    formatMeasurement(lightBuffer, sizeof(lightBuffer), snapshot_.lightAvailable, snapshot_.lightLux, 0, " lx");
+    snprintf(statusBuffer,
+             sizeof(statusBuffer),
+             "%s%s",
+             WiFi.status() == WL_CONNECTED ? "WiFi" : "OFF",
+             filesystemReady_ ? "" : " FS!");
 
     if (fullRefresh) {
       display_.clearDisplay();
@@ -307,19 +341,38 @@ class GreenhouseController {
     display_.clearDisplay();
     display_.setCursor(0, 0);
     display_.printf("Mode: %s\n", modeLabel());
-    display_.printf("Air:  %.1fC %.0f%%\n", snapshot_.airTempC, snapshot_.humidityPct);
-    display_.printf("Water: %.1fC\n", snapshot_.waterTempC);
-    display_.printf("Light: %.0f lx\n", snapshot_.lightLux);
-    display_.printf("Vent: %s/%s\n", actuators_.topVentOpen ? "OPEN" : "SHUT", actuators_.bottomVentOpen ? "OPEN" : "SHUT");
+    display_.printf("Air:  %s\n", airBuffer);
+    display_.printf("Water: %s\n", waterBuffer);
+    display_.printf("Light: %s\n", lightBuffer);
+    display_.printf("Vent: %s/%s\n", effectiveActuators_.topVentOpen ? "OPEN" : "SHUT", effectiveActuators_.bottomVentOpen ? "OPEN" : "SHUT");
     display_.printf("Fans: %s%s%s\n",
-                    actuators_.intakeFanOn ? "I" : "-",
-                    actuators_.exhaustFanOn ? "E" : "-",
-                    actuators_.circulationFansOn ? "C" : "-");
+                    effectiveActuators_.intakeFanOn ? "I" : "-",
+                    effectiveActuators_.exhaustFanOn ? "E" : "-",
+                    effectiveActuators_.circulationFansOn ? "C" : "-");
     display_.printf("Heat:%c Light:%c %s",
-                    actuators_.defoggerOn ? 'Y' : 'N',
-                    actuators_.growLightOn ? 'Y' : 'N',
-                    WiFi.status() == WL_CONNECTED ? "WiFi" : "OFF");
+                    effectiveActuators_.defoggerOn ? 'Y' : 'N',
+                    effectiveActuators_.growLightOn ? 'Y' : 'N',
+                    statusBuffer);
     display_.display();
+  }
+
+  void formatMeasurement(char *buffer,
+                         size_t bufferSize,
+                         bool available,
+                         float value,
+                         uint8_t decimals,
+                         const char *suffix) const {
+    if (!available) {
+      snprintf(buffer, bufferSize, "N/A");
+      return;
+    }
+
+    snprintf(buffer,
+             bufferSize,
+             "%.*f%s",
+             static_cast<int>(decimals),
+             static_cast<double>(value),
+             suffix);
   }
 
   const char *modeLabel() const {
@@ -335,6 +388,9 @@ class GreenhouseController {
   }
 
   void writeCsvHeaderIfNeeded() {
+    if (!filesystemReady_) {
+      return;
+    }
     if (LittleFS.exists(Settings::LOGGING.path)) {
       return;
     }
@@ -342,29 +398,35 @@ class GreenhouseController {
     if (!file) {
       return;
     }
-    file.println("millis,mode,air_temp_c,humidity_pct,water_temp_c,light_lux,top_open,bottom_open,fan_exhaust,fan_intake,defogger,grow_light,circulation");
+    file.println("millis,mode,air_available,air_temp_c,humidity_pct,water_available,water_temp_c,light_available,light_lux,top_open,bottom_open,fan_exhaust,fan_intake,defogger,grow_light,circulation");
     file.close();
   }
 
   void appendLogRecord() {
+    if (!filesystemReady_) {
+      return;
+    }
     File file = LittleFS.open(Settings::LOGGING.path, FILE_APPEND);
     if (!file) {
       return;
     }
-    file.printf("%lu,%s,%.2f,%.2f,%.2f,%.2f,%u,%u,%u,%u,%u,%u,%u\n",
+    file.printf("%lu,%s,%u,%.2f,%.2f,%u,%.2f,%u,%.2f,%u,%u,%u,%u,%u,%u,%u\n",
                 millis(),
                 modeLabel(),
+                snapshot_.airAvailable,
                 snapshot_.airTempC,
                 snapshot_.humidityPct,
+                snapshot_.waterAvailable,
                 snapshot_.waterTempC,
+                snapshot_.lightAvailable,
                 snapshot_.lightLux,
-                actuators_.topVentOpen,
-                actuators_.bottomVentOpen,
-                actuators_.exhaustFanOn,
-                actuators_.intakeFanOn,
-                actuators_.defoggerOn,
-                actuators_.growLightOn,
-                actuators_.circulationFansOn);
+                effectiveActuators_.topVentOpen,
+                effectiveActuators_.bottomVentOpen,
+                effectiveActuators_.exhaustFanOn,
+                effectiveActuators_.intakeFanOn,
+                effectiveActuators_.defoggerOn,
+                effectiveActuators_.growLightOn,
+                effectiveActuators_.circulationFansOn);
     file.close();
   }
 
@@ -383,6 +445,7 @@ class GreenhouseController {
 
   SensorSnapshot snapshot_;
   ActuatorState actuators_;
+  ActuatorState effectiveActuators_;
   ControlMode mode_ = ControlMode::automatic;
 
   bool bmeReady_ = false;
@@ -390,11 +453,13 @@ class GreenhouseController {
   bool lightReady_ = false;
   bool waterReady_ = false;
   bool displayReady_ = false;
+  bool filesystemReady_ = false;
   bool otaReady_ = false;
 
   uint32_t lastControlAt_ = 0;
   uint32_t lastDisplayAt_ = 0;
   uint32_t lastLogAt_ = 0;
+  uint32_t lastOtaAt_ = 0;
 };
 
 GreenhouseController controller;

@@ -77,7 +77,13 @@ constexpr SystemConfig SYSTEM{
     true,
 };
 
-constexpr GreenhouseLogic::SystemConfig CONTROL_SYSTEM = GreenhouseDefaults::CONTROL_SYSTEM;
+constexpr GreenhouseLogic::SystemConfig controlSystemConfig() {
+  return GreenhouseLogic::SystemConfig{
+      SYSTEM.enableDefogger,
+      SYSTEM.enableGrowLight,
+      SYSTEM.enableCirculationFans,
+  };
+}
 
 constexpr uint8_t OLED_ADDRESS = 0x3C;
 constexpr uint8_t BME280_I2C_ADDRESS = 0x76;

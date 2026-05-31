@@ -8,6 +8,7 @@ Use this file to prevent over-trusting the controller during deployment planning
 
 - Manual `AUTO`, `OPEN`, and `CLOSED` modes are implemented.
 - CSV logging to internal LittleFS is implemented.
+- Logged sensor rows now include explicit availability flags for air, water, and light readings.
 - OTA is optional and only available when Wi-Fi credentials are configured and OTA is enabled.
 - The controller supports the current owned-hardware DHT22 plus SG90 path and the fuller BME280 plus DS18B20 plus BH1750 path documented elsewhere in the repo.
 
@@ -17,6 +18,7 @@ Use this file to prevent over-trusting the controller during deployment planning
 - Servo-jam detection is not implemented.
 - A dedicated watchdog or self-recovery policy is not documented as implemented behavior.
 - Hardware-in-the-loop validation is not part of the current repo workflow.
+- LittleFS is no longer auto-formatted on mount failure; a storage fault now leaves logging disabled until the filesystem is repaired deliberately.
 
 ## Host-side control-logic coverage now present
 

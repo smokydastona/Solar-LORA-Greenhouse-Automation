@@ -89,10 +89,11 @@ Measure the real final current draw before locking any fuse value into hardware.
 
 ### DHT22 / AM2302
 
-- VCC -> 5 V
+- VCC -> 3.3 V preferred on the ESP32-S3 controller path
 - GND -> GND
 - DATA -> GPIO 16
-- If using a bare sensor instead of a module, add the pull-up resistor required by that part
+- If using a bare sensor instead of a module, add the pull-up resistor required by that part and pull the data line up to 3.3 V
+- If your breakout board requires 5 V power, do not direct-connect its data line to GPIO 16 unless the breakout is explicitly documented as 3.3 V logic-safe or you add level shifting
 - GPIO 16 is verified as a broken-out header pin on this Heltec-style SX1262 LoRa V3 family and is not listed in the board manual's onboard OLED, LoRa, LED, or user-button wiring table
 
 ### Board-specific warning

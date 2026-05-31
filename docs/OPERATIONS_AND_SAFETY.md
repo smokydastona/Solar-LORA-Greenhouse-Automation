@@ -129,4 +129,4 @@ See [SAFETY_MODEL.md](./SAFETY_MODEL.md) for the quick reference showing which s
 ### Grow light runs at the wrong times
 
 - Verify Wi-Fi and NTP if using scheduled supplemental lighting.
-- Verify the light threshold and local time zone in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h).
+- Verify the light threshold and local time zone in [include/Settings.h](../include/Settings.h).

@@ -21,7 +21,7 @@ These are the only greenhouse architecture diagrams that should be treated as cu
 
 ## Historical and non-canonical material
 
-- Anything under `docs/temp/` is planning history or reconciliation material, not a deployment wiring reference.
+- `docs/temp/` is an ignored scratch area, not part of the tracked deployment reference set, and may be empty in normal clones.
 - The canonical written sources remain [GREENHOUSE_MASTER_PLAN.md](./GREENHOUSE_MASTER_PLAN.md), [WIRING_5V.md](./WIRING_5V.md), [WIRING_12V_UPGRADE.md](./WIRING_12V_UPGRADE.md), and [BUILD_GUIDE_5V.md](./BUILD_GUIDE_5V.md).
 - If older concept sketches or superseded exports are added to the repository later, they should be marked clearly as superseded and should not reuse the canonical filenames above.
 

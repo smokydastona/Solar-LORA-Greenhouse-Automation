@@ -6,7 +6,7 @@ This document is the single source of truth for the greenhouse project. It conso
 
 Architecture and diagram status is indexed in [ARCHITECTURE_INDEX.md](./ARCHITECTURE_INDEX.md).
 
-Historical planning material from `docs/temp/` is reconciled in [temp/TEMP_PLAN_RECONCILIATION.md](./temp/TEMP_PLAN_RECONCILIATION.md). Use that note for context, but use this file and the active wiring/build docs as the current source of truth.
+Historical planning material under `docs/temp/` is intentionally excluded from the tracked deployment set and may be absent in working clones. Use this file and the active wiring/build docs as the current source of truth.
 
 Current reference diagrams:
 
@@ -108,6 +108,7 @@ The first-generation automation system is split into two layers.
 - Manual `AUTO`, `OPEN`, and `CLOSED` modes are implemented.
 - Automatic mode now applies a conservative air-sensor fallback: vent-open when the resolved day/night state is day, vent-closed when the resolved day/night state is night.
 - CSV logging to internal LittleFS is implemented.
+- Display and CSV logs now surface sensor availability explicitly so missing probes do not masquerade as valid zero readings.
 - OTA is optional and only available when Wi-Fi credentials are configured and OTA is enabled.
 - The firmware does not currently have battery-voltage awareness, servo-jam detection, or a dedicated watchdog policy.
 

@@ -46,14 +46,18 @@ jobs:
         shell: bash
         run: |
           python <<'PY'
-          from pathlib import Path
+          from pathlib import Path, PurePosixPath
           import markdown
+          import re
+          import shutil
 
           repo = Path('.').resolve()
           site = repo / 'site'
+          if site.exists():
+              shutil.rmtree(site)
           site.mkdir(exist_ok=True)
 
-          sources = [repo / 'README.md'] + sorted((repo / 'docs').glob('*.md'))
+          sources = [repo / 'README.md'] + sorted((repo / 'docs').glob('*.md')) + [repo / '.github' / 'copilot-instructions.md']
           links = []
 
           style = """
@@ -67,15 +71,64 @@ jobs:
           th, td { border: 1px solid #cfd8ce; padding: 0.5rem; text-align: left; }
           """
 
+          def target_name(source: Path) -> str:
+              return 'index.html' if source.name == 'README.md' else source.stem.lower() + '.html'
+
+          def normalize_target(target: str, source: Path) -> str:
+              normalized = target
+              while normalized.startswith('./'):
+                  normalized = normalized[2:]
+
+              if source.parent == repo / 'docs':
+                  while normalized.startswith('../'):
+                      normalized = normalized[3:]
+
+              return normalized
+
+          def rewrite_markdown_links(text: str, source: Path) -> str:
+              pattern = re.compile(r'(!?)\[([^\]]+)\]\(([^)]+)\)')
+
+              def replace(match):
+                  prefix, label, target = match.groups()
+                  if target.startswith(('http://', 'https://', '#', 'mailto:')):
+                      return match.group(0)
+
+                  normalized_target = normalize_target(target, source)
+                  if prefix == '!':
+                      return f'![{label}]({normalized_target})'
+
+                  if normalized_target.lower().endswith('.md'):
+                      target_path = PurePosixPath(normalized_target)
+                      html_target = 'index.html' if target_path.name.lower() == 'readme.md' else target_path.stem.lower() + '.html'
+                      return f'[{label}]({html_target})'
+
+                  return f'[{label}]({normalized_target})'
+
+              return pattern.sub(replace, text)
+
           for source in sources:
-              rel_name = 'index.html' if source.name == 'README.md' else source.stem.lower() + '.html'
+              rel_name = target_name(source)
               links.append((source.stem if source.name != 'README.md' else 'Home', rel_name))
 
           nav = '<nav>' + ''.join(f'<a href="{href}">{label}</a>' for label, href in links) + '</nav>'
 
+          for item in ('platformio.ini', 'src', 'include', 'test', '.github'):
+              source_path = repo / item
+              destination_path = site / item
+              if source_path.is_dir():
+                  shutil.copytree(source_path, destination_path, dirs_exist_ok=True)
+              elif source_path.is_file():
+                  destination_path.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(source_path, destination_path)
+
+          diagrams = repo / 'docs' / 'diagrams'
+          if diagrams.exists():
+              shutil.copytree(diagrams, site / 'diagrams', dirs_exist_ok=True)
+
           for source in sources:
-              rel_name = 'index.html' if source.name == 'README.md' else source.stem.lower() + '.html'
-              html = markdown.markdown(source.read_text(encoding='utf-8'), extensions=['tables', 'fenced_code'])
+              rel_name = target_name(source)
+              markdown_source = rewrite_markdown_links(source.read_text(encoding='utf-8'), source)
+              html = markdown.markdown(markdown_source, extensions=['tables', 'fenced_code'])
               output = site / rel_name
               output.write_text(
                   f'<!doctype html><html><head><meta charset="utf-8"><title>{source.stem}</title><style>{style}</style></head><body>{nav}{html}</body></html>',

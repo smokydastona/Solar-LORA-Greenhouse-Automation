@@ -48,7 +48,7 @@ Use it alongside [GREENHOUSE_MASTER_PLAN.md](./GREENHOUSE_MASTER_PLAN.md), [WIRI
 | --- | --- | --- | --- |
 | ESP32 crash or lockup | Direct-solar fan, passive vent geometry, physical greenhouse shell | Controller-driven vents, switched branches, display updates, logs | Greenhouse fails simpler, not into uncontrolled high-current behavior |
 | Wi-Fi or OTA unavailable | Local control logic, display, buttons, direct-solar fan | OTA updates, network time sync | Local operation continues without cloud dependency |
-| Main air sensor unavailable | Manual modes, direct-solar fan, other physically independent subsystems | Automatic climate decisions become untrustworthy | Operator should fall back to conservative manual or documented safe policy |
+| Main air sensor unavailable | Manual modes, direct-solar fan, other physically independent subsystems | Automatic control drops to the conservative day-open and night-closed fallback instead of full climate control | Operator should treat this as degraded operation and still inspect the greenhouse directly |
 | Power-bank depletion | Direct-solar fan in sun, passive structure | Controller layer and controller-switched loads | Heat-response airflow still has one intentionally dumb path |
 | Future 12 V branch fault | 5 V controller layer can remain separate if wired as documented | Faulted 12 V branch only | High-current faults stay branch-local when fused correctly |
 

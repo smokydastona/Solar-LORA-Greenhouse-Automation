@@ -10,7 +10,7 @@ This is the build sequence for the complete first-generation controller system i
 
 - The default firmware configuration now supports the currently owned starter hardware: one DHT22 / AM2302 for air temperature and humidity and two SG90 vent servos.
 - In that starter path, BH1750 and DS18B20 stay optional and disabled until those sensors are actually added.
-- The DHT22 data pin is now locked to [include/PinMap.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/PinMap.h) `TEMP_AIR_DHT` on GPIO 16. On the Heltec-style SX1262 LoRa V3 pinout used by your bought board, GPIO 16 is broken out on Header J3 physical pin 17 and is not shown as one of the board's pre-wired OLED, LoRa, LED, or button signals.
+- The DHT22 data pin is now locked to [include/PinMap.h](../include/PinMap.h) `TEMP_AIR_DHT` on GPIO 16. On the Heltec-style SX1262 LoRa V3 pinout used by your bought board, GPIO 16 is broken out on Header J3 physical pin 17 and is not shown as one of the board's pre-wired OLED, LoRa, LED, or button signals.
 - The greenhouse pin map is now remapped around the board's fixed OLED, LoRa, LED, button, and USB-serial reservations so the firmware pin definitions match this board family instead of the old generic devkit assumptions.
 
 ### Fuller upgrade path
@@ -40,10 +40,11 @@ This is the build sequence for the complete first-generation controller system i
 ### Current owned-hardware starter path
 
 1. Wire the DHT22 data pin to the configured DHT22 GPIO.
-2. Wire DHT22 VCC and GND to the controller 5 V and ground rails.
+2. Prefer wiring DHT22 VCC to the controller 3.3 V rail and GND to the common ground bus so the data line stays in the ESP32-S3 logic range.
 3. If your DHT22 module is a bare sensor rather than a breakout board, add the correct pull-up resistor specified for that sensor module.
-4. Power the controller and verify air temperature and humidity values appear on the display.
-5. Leave BH1750 and DS18B20 disabled in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) until they are physically installed.
+4. If your exact DHT22 breakout requires 5 V power, do not connect its data line directly to GPIO 16 unless the module is documented as 3.3 V logic-safe or you add a level-shift or 3.3 V pull-up arrangement.
+5. Power the controller and verify air temperature and humidity values appear on the display. Unavailable sensors now show `N/A` on the display instead of a fake zero reading.
+6. Leave BH1750 and DS18B20 disabled in [include/Settings.h](../include/Settings.h) until they are physically installed.
 
 ### Fuller upgrade path
 
@@ -51,7 +52,7 @@ This is the build sequence for the complete first-generation controller system i
 2. Wire 5 V and ground to the BME280 and BH1750.
 3. Wire the DS18B20 data line to the configured OneWire pin.
 4. Add a 4.7 kOhm pull-up between DS18B20 data and 5 V.
-5. Enable those sensors in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) and verify air temperature, humidity, water temperature, and light values appear on the display.
+5. Enable those sensors in [include/Settings.h](../include/Settings.h) and verify air temperature, humidity, water temperature, and light values appear on the display.
 
 ## Stage 3: add the vent servos
 
@@ -63,7 +64,7 @@ This is the build sequence for the complete first-generation controller system i
 ### Phase A: bench-test travel only
 
 5. Start with the bought SG90 servos as the current owned-hardware path.
-6. Leave the default servo angles in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) at their reduced-travel SG90 bench-test values for the first power-up.
+6. Leave the default servo angles in [include/Settings.h](../include/Settings.h) at their reduced-travel SG90 bench-test values for the first power-up.
 7. Power the system and verify each servo moves only through a small safe range without binding, slamming, or over-centering the linkage.
 8. Stop immediately if either servo chatters, stalls, draws the linkage into a hard stop, or twists the vent plastic.
 
@@ -126,7 +127,7 @@ This is the build sequence for the complete first-generation controller system i
 4. Warm the air sensor and verify the vents and fan outputs activate.
 5. Cool the air sensor and verify the vents close again.
 6. Simulate main air-sensor loss and verify the controller falls back conservatively instead of continuing the last blind climate state.
-7. Check that a log file appears on LittleFS.
+7. Check that a log file appears on LittleFS and includes the `*_available` columns for each optional sensor.
 8. Let the system run for at least one day before changing thresholds.
 
 ## First-week field checks
