@@ -49,6 +49,8 @@ The first-generation automation system is split into two layers.
 | Item | Current target |
 | --- | --- |
 | Controller board | SX1262 LoRa V3 ESP32-S3, onboard OLED, USB-C |
+| Current owned-hardware air sensor path | DHT22 / AM2302 supported directly in firmware as the starter air-temperature and humidity sensor |
+| Current owned-hardware servo path | 2 x SG90 micro servos supported for initial vent testing, with MG90S-class upgrade reserved if torque proves insufficient |
 | Solar input | 2 x 5 V 10 W panels in parallel |
 | Energy buffer | USB power bank sized to run the controller layer through cloud cover and short evening gaps |
 | Daily 5 V energy target | About 20 Wh to 35 Wh for the brain, sensors, vent servos, and switched 5 V loads before any future winter expansion |
@@ -60,8 +62,8 @@ The first-generation automation system is split into two layers.
 
 | Function | Hardware target | Notes |
 | --- | --- | --- |
-| Top vent actuator | MG90S-class metal-gear micro servo or equivalent torque class | Dedicated 5 V servo rail, not ESP32 USB power |
-| Bottom vent actuator | MG90S-class metal-gear micro servo or equivalent torque class | Match travel to the real vent linkage |
+| Top vent actuator | SG90 currently supported; MG90S-class metal-gear servo remains the torque-upgrade target | Dedicated 5 V servo rail, not ESP32 USB power |
+| Bottom vent actuator | SG90 currently supported; MG90S-class metal-gear servo remains the torque-upgrade target | Match travel to the real vent linkage |
 | Controller-switched fans | 5 V USB fan loads, roughly 0.15 A to 0.25 A each | Exact current must be measured on the final fan model |
 | Switched power stage | DAOKI-style 15 A 400 W MOSFET trigger modules, one per branch | Use one module per independently controlled branch |
 
@@ -115,9 +117,10 @@ The first-generation automation system is split into two layers.
 
 ## Sensor set
 
-- BME280 for air temperature and humidity
-- DS18B20 for water-temperature measurement in the thermal mass bucket or tote
-- BH1750 for ambient light measurement
+- DHT22 / AM2302 is now supported as the current owned-hardware air temperature and humidity path
+- BME280 remains supported as an air-sensor upgrade path when the user wants the I2C-based sensor stack
+- DS18B20 remains the optional water-temperature measurement path for the thermal mass bucket or tote
+- BH1750 remains the optional ambient light measurement path
 - Optional future sensors: soil moisture, second air-temperature probe, second water-temperature probe, battery-voltage divider
 
 ## Human interface requirements

@@ -20,7 +20,7 @@
 | --- | --- | --- | --- |
 | SX1262 LoRa V3 ESP32 LX7 dual-core 0.96 in blue OLED Type-C Wi-Fi board, 863 MHz to 928 MHz | 1 | Bought | Treat this as the actual on-hand controller board; matches the repo target closely enough for the current ESP32-S3 controller plan |
 | SG90 9 g micro servo motors | 2 | Bought | Actual purchased vent actuators; lighter-duty than the MG90S-class metal-gear servos used as the torque target elsewhere in the docs |
-| DHT22 / AM2302 temperature and humidity sensor module | 1 | Bought | Actual purchased air temperature and humidity sensor; this differs from the active first-pass firmware sensor set |
+| DHT22 / AM2302 temperature and humidity sensor module | 1 | Bought | Actual purchased air temperature and humidity sensor; now part of the supported starter firmware path |
 | DAOKI 15 A 400 W MOSFET trigger switch drive modules | Unknown exact count | Bought | Purchased switched-load power stage hardware for fan, light, heater, or circulation branches |
 
 ## Immediate first-generation controller build
@@ -48,8 +48,8 @@
 ## Current design versus purchased hardware note
 
 - The controller board and DAOKI MOSFET modules already align with the active first-generation design.
-- The bought DHT22 / AM2302 reflects what is physically on hand, but the current firmware and wiring docs still target BME280 plus BH1750 plus DS18B20 for the first implemented sensor stack.
-- The bought SG90 servos reflect what is physically on hand, but the current mechanical torque target in the active plan is still MG90S-class metal-gear servos or equivalent if the real vent linkage proves too heavy for SG90 units.
+- The bought DHT22 / AM2302 is now part of the current supported starter firmware path for air temperature and humidity.
+- The bought SG90 servos are now part of the current supported starter vent-actuation path, but MG90S-class metal-gear servos remain the torque-upgrade target if the real vent linkage proves too heavy for SG90 units.
 
 ## Structural and weather-hardening items
 

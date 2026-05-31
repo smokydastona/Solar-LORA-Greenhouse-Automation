@@ -4,6 +4,19 @@
 
 This is the build sequence for the complete first-generation controller system implemented in this repository.
 
+## Hardware paths before you start
+
+### Current firmware target
+
+- The default firmware configuration now supports the currently owned starter hardware: one DHT22 / AM2302 for air temperature and humidity and two SG90 vent servos.
+- In that starter path, BH1750 and DS18B20 stay optional and disabled until those sensors are actually added.
+- The configured DHT22 pin is currently [include/PinMap.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/PinMap.h) `TEMP_AIR_DHT` on GPIO 16. That pin choice must still be checked against the exact SX1262 LoRa V3 board pinout before permanent wiring because the board-specific free-pin map has not been physically verified in this repo.
+
+### Fuller upgrade path
+
+- The firmware still supports the fuller BME280 plus BH1750 plus DS18B20 sensor stack.
+- MG90S-class metal-gear servos remain the recommended torque upgrade if the real vent linkage is too heavy for SG90 units.
+
 ## Before you wire anything
 
 1. Check the greenhouse structure before installing electronics.
@@ -22,11 +35,21 @@ This is the build sequence for the complete first-generation controller system i
 
 ## Stage 2: wire the sensor bus
 
+### Current owned-hardware starter path
+
+1. Wire the DHT22 data pin to the configured DHT22 GPIO.
+2. Wire DHT22 VCC and GND to the controller 5 V and ground rails.
+3. If your DHT22 module is a bare sensor rather than a breakout board, add the correct pull-up resistor specified for that sensor module.
+4. Power the controller and verify air temperature and humidity values appear on the display.
+5. Leave BH1750 and DS18B20 disabled in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) until they are physically installed.
+
+### Fuller upgrade path
+
 1. Wire I2C SDA and SCL from the ESP32-S3 to the BME280 and BH1750.
 2. Wire 5 V and ground to the BME280 and BH1750.
 3. Wire the DS18B20 data line to the configured OneWire pin.
 4. Add a 4.7 kOhm pull-up between DS18B20 data and 5 V.
-5. Power the controller and verify air temperature, humidity, water temperature, and light values appear on the display.
+5. Enable those sensors in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) and verify air temperature, humidity, water temperature, and light values appear on the display.
 
 ## Stage 3: add the vent servos
 
@@ -35,14 +58,16 @@ This is the build sequence for the complete first-generation controller system i
 3. Connect both servo grounds to the common ground bus.
 4. Connect each servo signal wire to its configured GPIO.
 5. Verify both vents move between fully closed and fully open positions.
-6. Adjust the servo angles in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) until travel matches the real vent geometry.
+6. Start with the bought SG90 servos as the current owned-hardware path.
+7. Adjust the servo angles in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) until travel matches the real vent geometry.
+8. If the SG90 units chatter, stall, or cannot hold the vents in wind, treat that as a mechanical limit and move to MG90S-class metal-gear servos.
 
 ## Stage 4: add switched load outputs
 
 1. Install logic-level MOSFET modules for exhaust fan, intake fan, defogger, grow light, and any controlled circulation fan branch.
 2. Use the controller GPIO pins only as logic signals.
 3. Feed load power from the 5 V bus through the MOSFET-controlled branch.
-4. Verify each output turns on and off by manually forcing conditions in firmware or by heating and cooling the BME280.
+4. Verify each output turns on and off by manually forcing conditions in firmware or by heating and cooling the current air sensor in use.
 
 ## Stage 5: add the manual override buttons
 
@@ -95,7 +120,7 @@ This is the build sequence for the complete first-generation controller system i
 
 1. Recheck every servo horn, linkage screw, and fan mount after the first windy day.
 2. Inspect the enclosure interior for condensation after the first cold night and after the first watering session.
-3. Verify the BME280 still reads realistically after a sunny afternoon; move the sensor shield if it is heat-soaking.
+3. Verify the active air sensor still reads realistically after a sunny afternoon; move the sensor location or shield if it is heat-soaking.
 4. Inspect the vent plastic and cover tie points for rubbing damage caused by repeated servo travel.
 5. Confirm the power bank is still gaining charge during sun instead of only discharging all day.
 

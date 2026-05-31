@@ -8,6 +8,7 @@ Reference diagram: [5 V summer architecture](./diagrams/greenhouse-5v-summer-arc
 | --- | --- |
 | I2C SDA | GPIO 8 |
 | I2C SCL | GPIO 9 |
+| DHT22 air sensor data | GPIO 16 provisional default |
 | DS18B20 water probe | GPIO 10 |
 | Top vent servo signal | GPIO 3 |
 | Bottom vent servo signal | GPIO 4 |
@@ -51,15 +52,38 @@ all grounds
 | Branch | Intended load | Fuse target | Wire target |
 | --- | --- | --- | --- |
 | Main controller-load feed | Controller rail, sensors, servos, MOSFET supply input | 3 A near source | 18 AWG |
-| Sensor and logic branch | BME280, BH1750, DS18B20, buttons, logic rails | 1 A | 22 AWG to 24 AWG |
-| Servo feed | Two MG90S-class vent servos on dedicated 5 V rail | 2 A to 3 A | 18 AWG |
+| Sensor and logic branch | DHT22 starter path or BME280 plus BH1750 plus DS18B20 upgrade path, buttons, logic rails | 1 A | 22 AWG to 24 AWG |
+| Servo feed | Two SG90 vent servos for the current owned-hardware path, with MG90S-class as the torque-upgrade path | 2 A to 3 A | 18 AWG |
 | Exhaust branch | One 5 V fan branch or equivalent load | 1 A to 2 A | 18 AWG |
 | Intake branch | One 5 V fan branch or equivalent load | 1 A to 2 A | 18 AWG |
 | Mini-fan LM2596 subsystem | Separate four-fan mixing branch | 2 A | 18 AWG |
 
 Measure the real final current draw before locking any fuse value into hardware.
 
+## Current firmware target versus currently owned hardware
+
+### Current owned-hardware path
+
+- Air temperature and humidity: DHT22 / AM2302 on the configured digital input.
+- Vent actuators: 2 x SG90 servos on the dedicated 5 V servo rail.
+- Optional sensors not yet required for this starter path: BH1750 and DS18B20.
+
+### Fuller upgrade path
+
+- Air temperature and humidity: BME280 on I2C.
+- Light sensing: BH1750 on I2C.
+- Water temperature: DS18B20 on OneWire.
+- Vent actuators: MG90S-class metal-gear servos if the vent linkage needs more torque.
+
 ## Sensor wiring
+
+### DHT22 / AM2302
+
+- VCC -> 5 V
+- GND -> GND
+- DATA -> GPIO 16 provisional default
+- If using a bare sensor instead of a module, add the pull-up resistor required by that part
+- Before permanent installation, verify that GPIO 16 is actually free on the exact SX1262 LoRa V3 board revision being used
 
 ### BME280
 
@@ -83,6 +107,10 @@ Measure the real final current draw before locking any fuse value into hardware.
 - 4.7 kOhm resistor between 5 V and data line
 
 ## Servo wiring
+
+Current owned-hardware path: use the bought SG90 units first.
+
+Upgrade path: move to MG90S-class metal-gear servos if the vent linkage proves too stiff, too windy, or too abusive for SG90 torque.
 
 ### Top vent servo
 
@@ -147,3 +175,4 @@ LM2596 ground output
 - Label the load branches physically once wired.
 - Use 18 AWG for any branch that actually carries actuator or fan current.
 - Treat 22 AWG to 24 AWG as signal and sensor wire only.
+- Treat the DHT22 GPIO choice as provisional until the exact LoRa board free-pin map is verified against the real board in hand.

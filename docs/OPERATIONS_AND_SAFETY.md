@@ -113,14 +113,15 @@
 
 ### Climate values are wrong
 
-- Reposition the BME280 out of direct sun.
-- Verify the DS18B20 pull-up resistor.
-- Check I2C wiring for the BME280 and BH1750.
+- Reposition the active air sensor out of direct sun.
+- If using the current owned-hardware path, re-check the DHT22 wiring and verify the chosen GPIO is actually free on the exact board.
+- If using the fuller sensor stack, verify the DS18B20 pull-up resistor.
+- If using the fuller sensor stack, check I2C wiring for the BME280 and BH1750.
 
 ### Fans never turn on in auto mode
 
 - Confirm the MOSFET module is wired to the correct branch polarity.
-- Warm the BME280 sensor above the configured thresholds.
+- Warm the active air sensor above the configured thresholds.
 - Verify the fan GPIO pins match the real hardware.
 
 ### Grow light runs at the wrong times

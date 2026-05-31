@@ -6,6 +6,8 @@ namespace PinMap {
 constexpr gpio_num_t I2C_SDA = GPIO_NUM_8;
 constexpr gpio_num_t I2C_SCL = GPIO_NUM_9;
 
+constexpr gpio_num_t TEMP_AIR_DHT = GPIO_NUM_16;
+
 constexpr gpio_num_t TEMP_WATER = GPIO_NUM_10;
 
 constexpr gpio_num_t SERVO_TOP_VENT = GPIO_NUM_3;

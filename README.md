@@ -22,9 +22,9 @@ The implementation is based on the full greenhouse planning conversation capture
 ## Implemented firmware features
 
 - Dual vent control with two servo outputs
-- Temperature and humidity control using a BME280
-- Water temperature measurement using a DS18B20
-- Light sensing using a BH1750
+- Temperature and humidity control using either a DHT22 or a BME280
+- Optional water temperature measurement using a DS18B20
+- Optional light sensing using a BH1750
 - MOSFET-ready outputs for intake fan, exhaust fan, defogger, grow light, and circulation fans
 - Persistent control mode selection using onboard preferences storage
 - Manual override buttons for `AUTO`, `FORCE OPEN`, and `FORCE CLOSED` use cases
@@ -36,7 +36,7 @@ The implementation is based on the full greenhouse planning conversation capture
 
 1. Install VS Code with PlatformIO or use an environment that can build PlatformIO projects.
 2. Update the Wi-Fi credentials and any threshold values in [include/Settings.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/Settings.h) if you want network time and OTA.
-3. Wire the hardware according to [docs/WIRING_5V.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/WIRING_5V.md).
+3. Wire the hardware according to [docs/WIRING_5V.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/WIRING_5V.md), choosing either the current owned-hardware DHT22 plus SG90 path or the fuller BME280 plus BH1750 plus DS18B20 upgrade path.
 4. Flash the firmware to the ESP32-S3 board.
 5. Commission the system using the checklist in [docs/BUILD_GUIDE_5V.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/BUILD_GUIDE_5V.md).
 

@@ -5,6 +5,7 @@
 #include <ArduinoOTA.h>
 #include <BH1750.h>
 #include <DallasTemperature.h>
+#include <DHT.h>
 #include <ESP32Servo.h>
 #include <LittleFS.h>
 #include <OneWire.h>
@@ -29,7 +30,7 @@ struct SensorSnapshot {
   float humidityPct = NAN;
   float waterTempC = NAN;
   float lightLux = NAN;
-  bool bmeAvailable = false;
+  bool airAvailable = false;
   bool waterAvailable = false;
   bool lightAvailable = false;
 };
@@ -157,6 +158,11 @@ class GreenhouseController {
       bmeReady_ = bme_.begin(Settings::BME280_I2C_ADDRESS, &Wire);
     }
 
+    if (Settings::SYSTEM.enableDht22) {
+      dht_.begin();
+      dhtReady_ = true;
+    }
+
     if (Settings::SYSTEM.enableBh1750) {
       lightReady_ = lightSensor_.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, Settings::BH1750_ADDRESS, &Wire);
     }
@@ -253,7 +259,13 @@ class GreenhouseController {
     if (bmeReady_) {
       result.airTempC = bme_.readTemperature();
       result.humidityPct = bme_.readHumidity();
-      result.bmeAvailable = !isnan(result.airTempC) && !isnan(result.humidityPct);
+      result.airAvailable = !isnan(result.airTempC) && !isnan(result.humidityPct);
+    }
+
+    if (!result.airAvailable && dhtReady_) {
+      result.airTempC = dht_.readTemperature();
+      result.humidityPct = dht_.readHumidity();
+      result.airAvailable = !isnan(result.airTempC) && !isnan(result.humidityPct);
     }
 
     if (lightReady_) {
@@ -304,7 +316,7 @@ class GreenhouseController {
       return;
     }
 
-    const bool airValid = snapshot_.bmeAvailable;
+    const bool airValid = snapshot_.airAvailable;
     const bool daylight = isDaylight();
     struct tm timeInfo {};
     const bool hasTime = currentLocalTime(&timeInfo);
@@ -440,6 +452,7 @@ class GreenhouseController {
 
   Preferences preferences_;
   Adafruit_BME280 bme_;
+  DHT dht_{PinMap::TEMP_AIR_DHT, DHT22};
   BH1750 lightSensor_;
   OneWire oneWire_{PinMap::TEMP_WATER};
   DallasTemperature waterSensor_{&oneWire_};
@@ -455,6 +468,7 @@ class GreenhouseController {
   ControlMode mode_ = ControlMode::automatic;
 
   bool bmeReady_ = false;
+  bool dhtReady_ = false;
   bool lightReady_ = false;
   bool waterReady_ = false;
   bool displayReady_ = false;

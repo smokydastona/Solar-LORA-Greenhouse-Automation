@@ -45,6 +45,7 @@ struct LoggingConfig {
 
 struct SystemConfig {
   bool enableBme280;
+  bool enableDht22;
   bool enableBh1750;
   bool enableWaterProbe;
   bool enableDefogger;
@@ -92,9 +93,10 @@ constexpr LoggingConfig LOGGING{
 };
 
 constexpr SystemConfig SYSTEM{
-    true,
-    true,
-    true,
+  false,
+  true,
+  false,
+  false,
     true,
     true,
     true,
