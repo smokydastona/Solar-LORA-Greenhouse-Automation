@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "ControlLogic.h"
+#include "ControlLogicDefaults.h"
 
 namespace Settings {
 
@@ -49,21 +50,7 @@ constexpr WifiConfig WIFI{
     false,
 };
 
-constexpr ClimateConfig CLIMATE{
-    28.0F,
-    23.0F,
-    29.0F,
-    24.0F,
-    82.0F,
-    72.0F,
-    5.0F,
-    8.0F,
-    30.0F,
-    10.0F,
-    8U * 60U,
-    16U * 60U,
-    12000.0F,
-};
+constexpr ClimateConfig CLIMATE = GreenhouseDefaults::CLIMATE;
 
 constexpr ServoConfig SERVOS{
   28,
@@ -90,11 +77,7 @@ constexpr SystemConfig SYSTEM{
     true,
 };
 
-  constexpr GreenhouseLogic::SystemConfig CONTROL_SYSTEM{
-    SYSTEM.enableDefogger,
-    SYSTEM.enableGrowLight,
-    SYSTEM.enableCirculationFans,
-  };
+constexpr GreenhouseLogic::SystemConfig CONTROL_SYSTEM = GreenhouseDefaults::CONTROL_SYSTEM;
 
 constexpr uint8_t OLED_ADDRESS = 0x3C;
 constexpr uint8_t BME280_I2C_ADDRESS = 0x76;
