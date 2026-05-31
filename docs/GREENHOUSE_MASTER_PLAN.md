@@ -106,6 +106,7 @@ The first-generation automation system is split into two layers.
 ### Current firmware truths
 
 - Manual `AUTO`, `OPEN`, and `CLOSED` modes are implemented.
+- Automatic mode now applies a conservative air-sensor fallback: vent-open when the resolved day/night state is day, vent-closed when the resolved day/night state is night.
 - CSV logging to internal LittleFS is implemented.
 - OTA is optional and only available when Wi-Fi credentials are configured and OTA is enabled.
 - The firmware does not currently have battery-voltage awareness, servo-jam detection, or a dedicated watchdog policy.
@@ -114,7 +115,7 @@ See [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md) for the explicit bounda
 
 ### Deployment-safe behavior target
 
-- If the main air sensor is unavailable, the safe policy should be vent-open in daytime and vent-closed at night rather than continuing blind climate control.
+- If the main air sensor is unavailable, the implemented fallback now uses vent-open in daytime and vent-closed at night rather than continuing blind climate control.
 - If the water-temperature probe fails, thermal-mass logic should be ignored while the rest of the greenhouse continues operating.
 - If battery voltage monitoring is added later, non-critical loads should shed first: grow light, circulation, then fan branches before the controller itself is sacrificed.
 - Servo-jam handling requires either current sensing, positional feedback, or another verified detection method; until then, jam detection is not a claimed live feature.

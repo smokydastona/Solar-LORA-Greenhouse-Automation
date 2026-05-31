@@ -14,36 +14,15 @@
 #include <WiFi.h>
 #include <Wire.h>
 
+#include "ControlLogic.h"
 #include "PinMap.h"
 #include "Settings.h"
 
 namespace {
 
-enum class ControlMode : uint8_t {
-  automatic = 0,
-  forceOpen = 1,
-  forceClosed = 2,
-};
-
-struct SensorSnapshot {
-  float airTempC = NAN;
-  float humidityPct = NAN;
-  float waterTempC = NAN;
-  float lightLux = NAN;
-  bool airAvailable = false;
-  bool waterAvailable = false;
-  bool lightAvailable = false;
-};
-
-struct ActuatorState {
-  bool topVentOpen = false;
-  bool bottomVentOpen = false;
-  bool exhaustFanOn = false;
-  bool intakeFanOn = false;
-  bool defoggerOn = false;
-  bool growLightOn = false;
-  bool circulationFansOn = false;
-};
+using GreenhouseLogic::ActuatorState;
+using GreenhouseLogic::ControlMode;
+using GreenhouseLogic::SensorSnapshot;
 
 class Button {
  public:
@@ -244,17 +223,7 @@ class GreenhouseController {
   }
 
   void cycleMode() {
-    switch (mode_) {
-      case ControlMode::automatic:
-        setMode(ControlMode::forceOpen);
-        break;
-      case ControlMode::forceOpen:
-        setMode(ControlMode::forceClosed);
-        break;
-      case ControlMode::forceClosed:
-        setMode(ControlMode::automatic);
-        break;
-    }
+    setMode(GreenhouseLogic::nextMode(mode_));
   }
 
   void setMode(ControlMode mode) {
@@ -292,9 +261,13 @@ class GreenhouseController {
     return result;
   }
 
-  bool isDaylight() const {
+  bool isDaylight(bool hasTime, uint32_t currentMinute) const {
     if (snapshot_.lightAvailable) {
       return snapshot_.lightLux >= Settings::CLIMATE.growLightLuxThreshold;
+    }
+    if (hasTime) {
+      return currentMinute >= Settings::CLIMATE.growLightStartMinutes &&
+             currentMinute < Settings::CLIMATE.growLightStopMinutes;
     }
     return true;
   }
@@ -304,76 +277,43 @@ class GreenhouseController {
   }
 
   void computeOutputs() {
-    if (mode_ == ControlMode::forceOpen) {
-      actuators_.topVentOpen = true;
-      actuators_.bottomVentOpen = true;
-      actuators_.exhaustFanOn = true;
-      actuators_.intakeFanOn = true;
-      actuators_.circulationFansOn = Settings::SYSTEM.enableCirculationFans;
-      actuators_.defoggerOn = false;
-      actuators_.growLightOn = false;
-      return;
-    }
-
-    if (mode_ == ControlMode::forceClosed) {
-      actuators_.topVentOpen = false;
-      actuators_.bottomVentOpen = false;
-      actuators_.exhaustFanOn = false;
-      actuators_.intakeFanOn = false;
-      actuators_.circulationFansOn = false;
-      actuators_.defoggerOn = false;
-      actuators_.growLightOn = false;
-      return;
-    }
-
-    const bool airValid = snapshot_.airAvailable;
-    const bool daylight = isDaylight();
     struct tm timeInfo {};
     const bool hasTime = currentLocalTime(&timeInfo);
     const uint32_t currentMinute = hasTime ? static_cast<uint32_t>(timeInfo.tm_hour * 60U + timeInfo.tm_min) : 0U;
-    const bool inGrowWindow = hasTime && currentMinute >= Settings::CLIMATE.growLightStartMinutes &&
-                  currentMinute < Settings::CLIMATE.growLightStopMinutes;
+    const bool daylight = isDaylight(hasTime, currentMinute);
 
-    if (airValid) {
-      const bool tempOpen = snapshot_.airTempC >= Settings::CLIMATE.ventOpenTempC;
-      const bool tempClose = snapshot_.airTempC <= Settings::CLIMATE.ventCloseTempC;
+    const GreenhouseLogic::ClimateConfig climateConfig{
+        Settings::CLIMATE.ventOpenTempC,
+        Settings::CLIMATE.ventCloseTempC,
+        Settings::CLIMATE.fanOnTempC,
+        Settings::CLIMATE.fanOffTempC,
+        Settings::CLIMATE.humidityFanOnPct,
+        Settings::CLIMATE.humidityFanOffPct,
+        Settings::CLIMATE.heaterOnTempC,
+        Settings::CLIMATE.heaterOffTempC,
+        Settings::CLIMATE.waterHighTempC,
+        Settings::CLIMATE.waterLowTempC,
+        Settings::CLIMATE.growLightStartMinutes,
+        Settings::CLIMATE.growLightStopMinutes,
+        Settings::CLIMATE.growLightLuxThreshold,
+    };
 
-      if (tempOpen) {
-        actuators_.topVentOpen = true;
-        actuators_.bottomVentOpen = true;
-      } else if (tempClose) {
-        actuators_.topVentOpen = false;
-        actuators_.bottomVentOpen = false;
-      }
+    const GreenhouseLogic::SystemConfig systemConfig{
+        Settings::SYSTEM.enableDefogger,
+        Settings::SYSTEM.enableGrowLight,
+        Settings::SYSTEM.enableCirculationFans,
+    };
 
-      const bool fanTempOn = snapshot_.airTempC >= Settings::CLIMATE.fanOnTempC;
-      const bool fanTempOff = snapshot_.airTempC <= Settings::CLIMATE.fanOffTempC;
-      const bool humidityBoostOn = snapshot_.humidityPct >= Settings::CLIMATE.humidityFanOnPct;
-      const bool humidityBoostOff = snapshot_.humidityPct <= Settings::CLIMATE.humidityFanOffPct;
-
-      if ((fanTempOn || humidityBoostOn) && daylight) {
-        actuators_.exhaustFanOn = true;
-        actuators_.intakeFanOn = true;
-      } else if ((fanTempOff && humidityBoostOff) || !daylight) {
-        actuators_.exhaustFanOn = false;
-        actuators_.intakeFanOn = false;
-      }
-
-      if (Settings::SYSTEM.enableDefogger) {
-        if (!daylight && snapshot_.airTempC <= Settings::CLIMATE.heaterOnTempC) {
-          actuators_.defoggerOn = true;
-        } else if (snapshot_.airTempC >= Settings::CLIMATE.heaterOffTempC || daylight) {
-          actuators_.defoggerOn = false;
-        }
-      }
-
-      actuators_.circulationFansOn = daylight && (snapshot_.humidityPct >= Settings::CLIMATE.humidityFanOffPct ||
-                                                  snapshot_.airTempC >= Settings::CLIMATE.ventCloseTempC);
-    }
-
-    if (Settings::SYSTEM.enableGrowLight) {
-      actuators_.growLightOn = inGrowWindow && (!snapshot_.lightAvailable || snapshot_.lightLux < Settings::CLIMATE.growLightLuxThreshold);
-    }
+    actuators_ = GreenhouseLogic::evaluateActuators({
+        snapshot_,
+        actuators_,
+        mode_,
+        climateConfig,
+        systemConfig,
+        daylight,
+        hasTime,
+        currentMinute,
+    });
   }
 
   void applyActuatorState() {

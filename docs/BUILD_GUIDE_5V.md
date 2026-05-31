@@ -116,8 +116,9 @@ This is the build sequence for the complete first-generation controller system i
 3. Return to `AUTO` mode.
 4. Warm the air sensor and verify the vents and fan outputs activate.
 5. Cool the air sensor and verify the vents close again.
-6. Check that a log file appears on LittleFS.
-7. Let the system run for at least one day before changing thresholds.
+6. Simulate main air-sensor loss and verify the controller falls back conservatively instead of continuing the last blind climate state.
+7. Check that a log file appears on LittleFS.
+8. Let the system run for at least one day before changing thresholds.
 
 ## First-week field checks
 

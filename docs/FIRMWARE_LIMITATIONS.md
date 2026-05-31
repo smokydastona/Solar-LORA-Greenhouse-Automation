@@ -17,7 +17,13 @@ Use this file to prevent over-trusting the controller during deployment planning
 - Servo-jam detection is not implemented.
 - A dedicated watchdog or self-recovery policy is not documented as implemented behavior.
 - Hardware-in-the-loop validation is not part of the current repo workflow.
-- Unit-test coverage for control-state transitions and sensor-failure handling is not present.
+
+## Host-side control-logic coverage now present
+
+- Host-side tests cover mode cycling behavior.
+- Host-side tests cover forced-open and forced-closed output behavior.
+- Host-side tests cover the conservative main air-sensor fallback behavior.
+- These tests validate the shared control-decision function, not the full board-level hardware stack.
 
 ## Safe operating interpretation
 

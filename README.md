@@ -42,6 +42,12 @@ The implementation is based on the full greenhouse planning conversation capture
 4. Flash the firmware to the ESP32-S3 board.
 5. Commission the system using the checklist in [docs/BUILD_GUIDE_5V.md](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/docs/BUILD_GUIDE_5V.md).
 
+## Logic test harness
+
+- Shared control decisions now live in [include/ControlLogic.h](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/include/ControlLogic.h).
+- Host-side tests for mode transitions and air-sensor fallback live in [test/control_logic/test_control_logic.cpp](c:/Users/smoky/OneDrive/Desktop/Homemade%20Mods/Mini%20Greenhouse/test/control_logic/test_control_logic.cpp).
+- If PlatformIO and a native compiler are available, run `pio test -e control_logic_native`.
+
 ## Reality status
 
 | Subsystem | Planned | Implemented in repo | Physically installed |
