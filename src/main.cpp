@@ -75,6 +75,12 @@ struct WifiRuntimeConfig {
   bool usingStoredCredentials = false;
 };
 
+struct WifiScanEntry {
+  char ssid[33]{};
+  int32_t rssi = 0;
+  bool secure = false;
+};
+
 enum class SafeModeReason : uint8_t {
   none = 0,
   manual,
@@ -800,6 +806,7 @@ class GreenhouseController {
       }
 
       wifiScanResultsJson_.remove(0);
+      wifiScanResultCount_ = 0U;
       wifiScanResultsJson_ += '[';
 
       size_t emitted = 0U;
@@ -830,9 +837,13 @@ class GreenhouseController {
         wifiScanResultsJson_ += F(",\"secure\":");
         wifiScanResultsJson_ += (WiFi.encryptionType(index) == WIFI_AUTH_OPEN) ? F("false") : F("true");
         wifiScanResultsJson_ += '}';
+        copySettingString(wifiScanEntries_[emitted].ssid, sizeof(wifiScanEntries_[emitted].ssid), ssid.c_str());
+        wifiScanEntries_[emitted].rssi = WiFi.RSSI(index);
+        wifiScanEntries_[emitted].secure = WiFi.encryptionType(index) != WIFI_AUTH_OPEN;
         ++emitted;
       }
 
+      wifiScanResultCount_ = emitted;
       wifiScanResultsJson_ += ']';
       wifiScanError_[0] = '\0';
       WiFi.scanDelete();
@@ -870,10 +881,35 @@ class GreenhouseController {
       return;
     }
 
-    saveWifiConfig(ssid.c_str(), password.c_str(), hostname.c_str());
+    const bool sameStoredNetwork = wifiConfig_.usingStoredCredentials && ssid == wifiConfig_.ssid;
+    String resolvedPassword = password;
+    bool preservedPassword = false;
+
+    if (resolvedPassword.length() == 0 && sameStoredNetwork && strlen(wifiConfig_.password) > 0) {
+      resolvedPassword = wifiConfig_.password;
+      preservedPassword = true;
+    }
+
+    if (resolvedPassword.length() == 0 && cachedNetworkIsSecure(ssid)) {
+      webServer_.send(
+          400,
+          "text/html; charset=utf-8",
+          String("<html><body><h1>Password required</h1><p>The nearby network <strong>") +
+              htmlEscape(ssid.c_str()) +
+              "</strong> is secured. Enter the Wi-Fi password before saving.</p><p><a href='/'>Return to the setup portal</a></p></body></html>");
+      return;
+    }
+
+    saveWifiConfig(ssid.c_str(), resolvedPassword.c_str(), hostname.c_str());
     webServer_.send(200,
                     "text/html; charset=utf-8",
-                    "<html><body><h1>Wi-Fi saved</h1><p>The node is restarting and will try the new network. If it cannot join, reconnect to the setup AP and open http://192.168.4.1/ again.</p></body></html>");
+                    String("<html><body><h1>Wi-Fi saved</h1><p>Saved SSID: <strong>") +
+                        htmlEscape(ssid.c_str()) +
+                        "</strong></p><p>Password stored: <strong>" +
+                        String(resolvedPassword.length() > 0 ? "yes" : "no") +
+                        "</strong>" +
+                        (preservedPassword ? " (kept the existing saved password)." : ".") +
+                        "</p><p>The node is restarting and will try the saved network. If it cannot join, reconnect to the setup AP and open http://192.168.4.1/ again.</p></body></html>");
     delay(300);
     ESP.restart();
   }
@@ -1009,6 +1045,13 @@ class GreenhouseController {
     } else {
       html += F("<p><strong>Station Wi-Fi:</strong> not connected</p>");
     }
+    if (wifiConfig_.hasCredentials) {
+      html += String("<p><strong>Configured station target:</strong> ") + htmlEscape(wifiConfig_.ssid) +
+              "<br><strong>Credential source:</strong> " +
+              String(wifiConfig_.usingStoredCredentials ? "saved on this node" : "firmware defaults") +
+              "<br><strong>Password stored:</strong> " +
+              String(strlen(wifiConfig_.password) > 0 ? "yes" : "no") + "</p>";
+    }
     if (setupApActive_) {
       html += String("<p><strong>Setup AP SSID:</strong> ") + htmlEscape(setupApSsid_) + "<br><strong>Password:</strong> " + htmlEscape(setupApPassword_) + "<br><strong>Portal:</strong> <a href='http://192.168.4.1/'>http://192.168.4.1/</a></p>";
     }
@@ -1029,7 +1072,7 @@ class GreenhouseController {
     html += F("<label for='ssid'>SSID</label><input id='ssid' name='ssid' maxlength='32' required value='");
     html += htmlEscape(wifiConfig_.ssid);
     html += F("'>");
-    html += F("<label for='password'>Password</label><input id='password' name='password' type='password' maxlength='64' value=''>");
+    html += F("<label for='password'>Password</label><input id='password' name='password' type='password' maxlength='64' value=''><p class='muted'>Leave blank only for open networks. Saving the same SSID again keeps the existing saved password.</p>");
     html += F("<label for='hostname'>Hostname</label><input id='hostname' name='hostname' maxlength='32' value='");
     html += htmlEscape(wifiConfig_.hostname);
     html += F("'><button type='submit'>Save Wi-Fi</button></form>");
@@ -1109,6 +1152,15 @@ class GreenhouseController {
     preferences_.putString("wifi_pass", password == nullptr ? "" : password);
     const char *resolvedHostname = (hostname != nullptr && strlen(hostname) > 0) ? hostname : Settings::WIFI.hostname;
     preferences_.putString("wifi_host", resolvedHostname == nullptr ? "mini-greenhouse" : resolvedHostname);
+  }
+
+  bool cachedNetworkIsSecure(const String &ssid) const {
+    for (size_t index = 0; index < wifiScanResultCount_; ++index) {
+      if (ssid == wifiScanEntries_[index].ssid) {
+        return wifiScanEntries_[index].secure;
+      }
+    }
+    return false;
   }
 
   void buildSetupAccessPointIdentity() {
@@ -2193,7 +2245,9 @@ class GreenhouseController {
   uint8_t wifiReconnectFailures_ = 0;
   bool wifiScanInProgress_ = false;
   bool wifiScanRequested_ = false;
+  size_t wifiScanResultCount_ = 0U;
   WifiRuntimeConfig wifiConfig_{};
+  WifiScanEntry wifiScanEntries_[kWifiScanResultCapacity]{};
   String wifiScanResultsJson_ = "[]";
   char setupApSsid_[20]{};
   char setupApPassword_[16]{};
