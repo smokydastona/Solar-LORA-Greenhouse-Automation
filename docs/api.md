@@ -13,16 +13,21 @@ The current implemented integration surface is MQTT over Wi-Fi with Home Assista
 - Home Assistant MQTT discovery payloads
 - safe inbound MQTT mode control accepting only `AUTO`, `OPEN`, and `CLOSED`
 - structured JSON state including climate, battery, health, diagnostics, actuator, and connectivity fields
-- local HTTP dashboard and setup page
+- local HTTP dashboard and setup page with station-mode live controls
 - nearby Wi-Fi scan JSON endpoint at `/api/wifi/scan`
+- local control endpoints for live mode changes, manual override, and per-output commands
 - local firmware upload endpoint at `/update`
 
 ## Local HTTP Surface
 
 The node-local HTTP interface currently exposes:
 
-- `/`: dashboard, Wi-Fi onboarding form, and firmware upload form
+- `/`: dashboard, Wi-Fi onboarding form, station-mode live control surface, and firmware upload form
 - `/api/state`: live JSON state snapshot
+- `/api/control`: live control status for the dashboard
+- `/api/control/mode`: update controller mode with `AUTO`, `OPEN`, `CLOSED`, or `MANUAL`
+- `/api/control/manual`: enable or release manual output override
+- `/api/control/actuator`: set individual outputs while manual override is active
 - `/api/wifi/scan`: nearby SSID scan results for the onboarding dropdown
 - `/wifi`: save Wi-Fi credentials and restart
 - `/wifi/reset`: clear saved Wi-Fi and restart into setup mode
@@ -52,6 +57,7 @@ The published state includes:
 - battery status
 - controller health score
 - recent persisted diagnostic event, per-sensor error counters, and servo timing diagnostics
+- manual-override active state for the local dashboard
 - actuator state
 - connectivity and storage status
 - last remote command status
@@ -72,7 +78,12 @@ Not yet implemented as first-class repo surfaces:
 - Prometheus exporter
 - REST API
 - webhooks
-- direct remote actuator commands
+
+The HTTP control surface is intentionally node-local and unauthenticated. It is meant for the greenhouse owner on the same LAN, not for internet exposure.
+
+## VPN Boundary
+
+Once the node has joined the normal Wi-Fi network, it behaves like a standard HTTP device on the LAN. It does not proxy traffic, inject station-mode DNS, or block VPN use on other clients. If a phone or laptop VPN client still cannot reach the dashboard, that limit is on the client VPN policy such as local-LAN blocking, not on the node firmware.
 
 ## Compatibility Rule
 

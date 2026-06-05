@@ -136,7 +136,8 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - Manual override buttons for `AUTO`, `FORCE OPEN`, and `FORCE CLOSED` use cases
 - OLED status display for climate values and actuator states
 - CSV logging to LittleFS
-- Built-in local web dashboard with a setup portal for first-time Wi-Fi onboarding, nearby-network SSID scanning, clipboard and QR-text Wi-Fi import, and future node reuse
+- Built-in local web dashboard with a setup portal for first-time Wi-Fi onboarding, nearby-network SSID scanning, clipboard and QR-text Wi-Fi import, and a station-mode live dashboard once the node joins Wi-Fi
+- Station-mode live controls for `AUTO`, `OPEN`, `CLOSED`, and per-output manual override from the node-local dashboard
 - Browser-based Wi-Fi firmware upload using the OTA partition layout, so installed nodes can be updated in place from the dashboard
 - Firmware versions now auto-derive from git history during each build instead of relying on manual version edits
 - Optional Wi-Fi and OTA update support when Wi-Fi credentials are configured or saved through the local portal
@@ -160,8 +161,9 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 3. Wire the hardware according to [docs/WIRING_5V.md](./docs/WIRING_5V.md), choosing either the current owned-hardware DHT22 plus SG90 path or the fuller BME280 plus BH1750 plus DS18B20 upgrade path.
 4. Flash the firmware to the ESP32-S3 board.
 5. If the node starts in setup mode, join the broadcast setup SSID and open `http://192.168.4.1/` manually instead of relying on any captive-portal popup. Then choose a nearby SSID from the scan dropdown and either paste or import copied Wi-Fi share text from your phone or PC or enter only the password manually.
-6. After the node is installed on stable Wi-Fi, use the dashboard firmware-upload form with the built `firmware.bin` whenever you want an in-place update.
-6. Commission the system using the checklist in [docs/BUILD_GUIDE_5V.md](./docs/BUILD_GUIDE_5V.md).
+6. After the node is installed on stable Wi-Fi, use the dashboard for live telemetry, safe local manual control, and firmware upload with the built `firmware.bin` whenever you want an in-place update.
+7. The node does not block VPN use on the same network, but some phone and laptop VPN clients disable access to local LAN devices unless local-network access is allowed in the VPN app.
+8. Commission the system using the checklist in [docs/BUILD_GUIDE_5V.md](./docs/BUILD_GUIDE_5V.md).
 
 ## Logic Test Harness
 

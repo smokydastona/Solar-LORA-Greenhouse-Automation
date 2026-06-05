@@ -715,6 +715,10 @@ class GreenhouseController {
 
     webServer_.on("/", HTTP_GET, [this]() { handleDashboardRequest(); });
     webServer_.on("/api/state", HTTP_GET, [this]() { handleStateApiRequest(); });
+    webServer_.on("/api/control", HTTP_GET, [this]() { handleControlApiRequest(); });
+    webServer_.on("/api/control/mode", HTTP_POST, [this]() { handleModeControlRequest(); });
+    webServer_.on("/api/control/manual", HTTP_POST, [this]() { handleManualOverrideRequest(); });
+    webServer_.on("/api/control/actuator", HTTP_POST, [this]() { handleActuatorControlRequest(); });
     webServer_.on("/api/wifi/scan", HTTP_GET, [this]() { handleWifiScanRequest(); });
     webServer_.on("/wifi", HTTP_POST, [this]() { handleWifiSaveRequest(); });
     webServer_.on("/wifi/reset", HTTP_POST, [this]() { handleWifiResetRequest(); });
@@ -745,6 +749,193 @@ class GreenhouseController {
     buildTelemetryPayload(payload, sizeof(payload));
     webServer_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     webServer_.send(200, "application/json; charset=utf-8", payload);
+  }
+
+  void handleControlApiRequest() {
+    String payload;
+    buildControlApiPayload(payload, true, "");
+    webServer_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    webServer_.send(200, "application/json; charset=utf-8", payload);
+  }
+
+  void handleModeControlRequest() {
+    if (safeMode_) {
+      sendControlApiResponse(409, false, "Safe mode is active. Live controls are locked.");
+      return;
+    }
+
+    String mode = webServer_.arg("mode");
+    mode.trim();
+    mode.toUpperCase();
+
+    if (mode == F("MANUAL")) {
+      enableManualOverrideFromCurrentState();
+      refreshControlOutputs();
+      sendControlApiResponse(200, true, "Manual output override enabled.");
+      return;
+    }
+
+    ControlMode nextMode = ControlMode::automatic;
+    if (mode == F("OPEN")) {
+      nextMode = ControlMode::forceOpen;
+    } else if (mode == F("CLOSED")) {
+      nextMode = ControlMode::forceClosed;
+    } else if (mode != F("AUTO")) {
+      sendControlApiResponse(400, false, "Unsupported mode. Use AUTO, OPEN, CLOSED, or MANUAL.");
+      return;
+    }
+
+    setMode(nextMode);
+    refreshControlOutputs();
+    sendControlApiResponse(200, true, "Controller mode updated.");
+  }
+
+  void handleManualOverrideRequest() {
+    if (safeMode_) {
+      sendControlApiResponse(409, false, "Safe mode is active. Manual override is unavailable.");
+      return;
+    }
+
+    bool enabled = false;
+    if (!parseToggleValue(webServer_.arg("enabled"), enabled)) {
+      sendControlApiResponse(400, false, "Invalid manual override value. Use true or false.");
+      return;
+    }
+
+    if (enabled) {
+      enableManualOverrideFromCurrentState();
+    } else {
+      manualOverrideActive_ = false;
+    }
+    refreshControlOutputs();
+    sendControlApiResponse(200, true, enabled ? "Manual override enabled." : "Manual override released.");
+  }
+
+  void handleActuatorControlRequest() {
+    if (safeMode_) {
+      sendControlApiResponse(409, false, "Safe mode is active. Actuator commands are locked.");
+      return;
+    }
+
+    bool requestedState = false;
+    if (!parseToggleValue(webServer_.arg("state"), requestedState)) {
+      sendControlApiResponse(400, false, "Invalid actuator state. Use on/off, open/closed, true/false, or 1/0.");
+      return;
+    }
+
+    const String actuator = webServer_.arg("actuator");
+    if (!applyManualActuatorCommand(actuator, requestedState)) {
+      sendControlApiResponse(400, false, "Unknown actuator.");
+      return;
+    }
+
+    refreshControlOutputs();
+    sendControlApiResponse(200, true, "Actuator command queued.");
+  }
+
+  bool parseToggleValue(String value, bool &enabled) const {
+    value.trim();
+    value.toUpperCase();
+    if (value == F("1") || value == F("TRUE") || value == F("ON") || value == F("OPEN") || value == F("ENABLE") || value == F("ENABLED")) {
+      enabled = true;
+      return true;
+    }
+    if (value == F("0") || value == F("FALSE") || value == F("OFF") || value == F("CLOSED") || value == F("CLOSE") || value == F("DISABLE") || value == F("DISABLED")) {
+      enabled = false;
+      return true;
+    }
+    return false;
+  }
+
+  void enableManualOverrideFromCurrentState() {
+    setMode(ControlMode::automatic);
+    manualActuators_ = effectiveActuators_;
+    manualOverrideActive_ = true;
+  }
+
+  bool applyManualActuatorCommand(String actuator, bool enabled) {
+    actuator.trim();
+    actuator.toLowerCase();
+    if (!manualOverrideActive_) {
+      enableManualOverrideFromCurrentState();
+    }
+
+    if (actuator == F("top_open") || actuator == F("top") || actuator == F("top_vent")) {
+      manualActuators_.topVentOpen = enabled;
+      return true;
+    }
+    if (actuator == F("bottom_open") || actuator == F("bottom") || actuator == F("bottom_vent")) {
+      manualActuators_.bottomVentOpen = enabled;
+      return true;
+    }
+    if (actuator == F("fan_exhaust") || actuator == F("exhaust") || actuator == F("exhaust_fan")) {
+      manualActuators_.exhaustFanOn = enabled;
+      return true;
+    }
+    if (actuator == F("fan_intake") || actuator == F("intake") || actuator == F("intake_fan")) {
+      manualActuators_.intakeFanOn = enabled;
+      return true;
+    }
+    if (actuator == F("defogger") || actuator == F("heater")) {
+      manualActuators_.defoggerOn = enabled;
+      return true;
+    }
+    if (actuator == F("grow_light") || actuator == F("light")) {
+      manualActuators_.growLightOn = enabled;
+      return true;
+    }
+    if (actuator == F("circulation") || actuator == F("circulation_fans") || actuator == F("circulation_fan")) {
+      manualActuators_.circulationFansOn = enabled;
+      return true;
+    }
+    return false;
+  }
+
+  void refreshControlOutputs() {
+    computeOutputs();
+    applyActuatorState();
+    renderDisplay(true);
+  }
+
+  void buildControlApiPayload(String &payload, bool ok, const char *message) const {
+    payload.remove(0);
+    payload.reserve(640);
+    payload += F("{\"ok\":");
+    payload += ok ? F("true") : F("false");
+    payload += F(",\"message\":\"");
+    payload += jsonEscape(message == nullptr ? "" : message);
+    payload += F("\",\"manual_override\":{\"active\":");
+    payload += manualOverrideActive_ ? F("true") : F("false");
+    payload += F("},\"mode\":\"");
+    payload += modeLabel();
+    payload += F("\",\"wifi\":{\"connected\":");
+    payload += WiFi.status() == WL_CONNECTED ? F("true") : F("false");
+    payload += F(",\"ssid\":\"");
+    payload += jsonEscape(wifiConfig_.ssid);
+    payload += F("\",\"hostname\":\"");
+    payload += jsonEscape(wifiConfig_.hostname);
+    payload += F("\"},\"actuators\":{\"top_open\":");
+    payload += effectiveActuators_.topVentOpen ? F("true") : F("false");
+    payload += F(",\"bottom_open\":");
+    payload += effectiveActuators_.bottomVentOpen ? F("true") : F("false");
+    payload += F(",\"fan_exhaust\":");
+    payload += effectiveActuators_.exhaustFanOn ? F("true") : F("false");
+    payload += F(",\"fan_intake\":");
+    payload += effectiveActuators_.intakeFanOn ? F("true") : F("false");
+    payload += F(",\"defogger\":");
+    payload += effectiveActuators_.defoggerOn ? F("true") : F("false");
+    payload += F(",\"grow_light\":");
+    payload += effectiveActuators_.growLightOn ? F("true") : F("false");
+    payload += F(",\"circulation\":");
+    payload += effectiveActuators_.circulationFansOn ? F("true") : F("false");
+    payload += F("}}}");
+  }
+
+  void sendControlApiResponse(int statusCode, bool ok, const char *message) {
+    String payload;
+    buildControlApiPayload(payload, ok, message);
+    webServer_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    webServer_.send(statusCode, "application/json; charset=utf-8", payload);
   }
 
   void handleWifiScanRequest() {
@@ -1065,6 +1256,40 @@ class GreenhouseController {
     html += String("<div class='card'><strong>Storage</strong><br>") + (filesystemReady_ ? "LittleFS OK" : "LittleFS OFF") + "</div>";
     html += F("</div></section>");
 
+    if (WiFi.status() == WL_CONNECTED) {
+      html += F("<section><h2>Live Dashboard</h2><p class='muted'>This station-mode dashboard polls the controller in place, shows live telemetry, and sends direct LAN control requests. The firmware does not proxy, filter, or block VPN traffic on your other clients. Only the temporary setup AP uses local DNS capture before the node joins Wi-Fi.</p>");
+      html += F("<div class='grid'>");
+      html += F("<div class='card'><strong>Live Mode</strong><br><span id='live-mode'>Loading...</span></div>");
+      html += F("<div class='card'><strong>Controller State</strong><br><span id='live-controller'>Loading...</span></div>");
+      html += F("<div class='card'><strong>Manual Override</strong><br><span id='manual-flag'>Loading...</span></div>");
+      html += F("<div class='card'><strong>Air</strong><br><span id='live-air'>Loading...</span></div>");
+      html += F("<div class='card'><strong>Water</strong><br><span id='live-water'>Loading...</span></div>");
+      html += F("<div class='card'><strong>Light</strong><br><span id='live-light'>Loading...</span></div>");
+      html += F("<div class='card'><strong>Battery</strong><br><span id='live-battery'>Loading...</span></div>");
+      html += F("<div class='card'><strong>Uptime</strong><br><span id='live-uptime'>Loading...</span></div>");
+      html += F("</div>");
+      html += F("<div class='notice'><strong>Safe control model:</strong> AUTO returns to climate logic. OPEN and CLOSED force whole-greenhouse vent behavior. Any per-output button below enables manual override and holds that exact mix until you return to AUTO.</div>");
+      html += F("<div class='action-row'><button type='button' class='secondary' data-mode='AUTO'>Return to Auto</button><button type='button' data-mode='OPEN'>Force Open</button><button type='button' data-mode='CLOSED'>Force Closed</button><button type='button' class='secondary' data-mode='MANUAL'>Hold Current Output Mix</button></div>");
+      html += F("<p id='control-status' class='muted status-note'>Loading live state...</p>");
+      html += F("<div class='grid'>");
+      html += F("<div class='card'><strong>Top Vent</strong><br><span id='actuator-top'>Loading...</span><div class='action-row'><button type='button' data-actuator='top_open' data-state='OPEN'>Open</button><button type='button' class='secondary' data-actuator='top_open' data-state='CLOSED'>Close</button></div></div>");
+      html += F("<div class='card'><strong>Bottom Vent</strong><br><span id='actuator-bottom'>Loading...</span><div class='action-row'><button type='button' data-actuator='bottom_open' data-state='OPEN'>Open</button><button type='button' class='secondary' data-actuator='bottom_open' data-state='CLOSED'>Close</button></div></div>");
+      html += F("<div class='card'><strong>Exhaust Fan</strong><br><span id='actuator-exhaust'>Loading...</span><div class='action-row'><button type='button' data-actuator='fan_exhaust' data-state='ON'>On</button><button type='button' class='secondary' data-actuator='fan_exhaust' data-state='OFF'>Off</button></div></div>");
+      html += F("<div class='card'><strong>Intake Fan</strong><br><span id='actuator-intake'>Loading...</span><div class='action-row'><button type='button' data-actuator='fan_intake' data-state='ON'>On</button><button type='button' class='secondary' data-actuator='fan_intake' data-state='OFF'>Off</button></div></div>");
+      html += F("<div class='card'><strong>Defogger</strong><br><span id='actuator-defogger'>Loading...</span><div class='action-row'><button type='button' data-actuator='defogger' data-state='ON'>On</button><button type='button' class='secondary' data-actuator='defogger' data-state='OFF'>Off</button></div></div>");
+      html += F("<div class='card'><strong>Grow Light</strong><br><span id='actuator-grow-light'>Loading...</span><div class='action-row'><button type='button' data-actuator='grow_light' data-state='ON'>On</button><button type='button' class='secondary' data-actuator='grow_light' data-state='OFF'>Off</button></div></div>");
+      html += F("<div class='card'><strong>Circulation Fans</strong><br><span id='actuator-circulation'>Loading...</span><div class='action-row'><button type='button' data-actuator='circulation' data-state='ON'>On</button><button type='button' class='secondary' data-actuator='circulation' data-state='OFF'>Off</button></div></div>");
+      html += F("</div>");
+      html += F("<div class='grid'>");
+      html += String("<div class='card'><strong>Crop Profile</strong><br>") + htmlEscape(GreenhouseLogic::cropProfile(Settings::CROP.profile).name) + "</div>";
+      html += String("<div class='card'><strong>Vent Window</strong><br>") + String(Settings::CLIMATE.ventCloseTempC, 1) + "C to " + String(Settings::CLIMATE.ventOpenTempC, 1) + "C</div>";
+      html += String("<div class='card'><strong>Humidity Fan</strong><br>") + String(Settings::CLIMATE.humidityFanOffPct, 0) + "% to " + String(Settings::CLIMATE.humidityFanOnPct, 0) + "%</div>";
+      html += String("<div class='card'><strong>Defogger Window</strong><br>") + String(Settings::CLIMATE.heaterOnTempC, 1) + "C to " + String(Settings::CLIMATE.heaterOffTempC, 1) + "C</div>";
+      html += String("<div class='card'><strong>Grow Light Window</strong><br>") + String(Settings::CLIMATE.growLightStartMinutes / 60U) + ":" + String(Settings::CLIMATE.growLightStartMinutes % 60U < 10U ? "0" : "") + String(Settings::CLIMATE.growLightStartMinutes % 60U) + " to " + String(Settings::CLIMATE.growLightStopMinutes / 60U) + ":" + String(Settings::CLIMATE.growLightStopMinutes % 60U < 10U ? "0" : "") + String(Settings::CLIMATE.growLightStopMinutes % 60U) + "</div>";
+      html += String("<div class='card'><strong>Power Guards</strong><br>Low: ") + String(Settings::BATTERY.lowVoltage, 2) + "V<br>Critical: " + String(Settings::BATTERY.criticalVoltage, 2) + "V</div>";
+      html += F("</div></section>");
+    }
+
     html += F("<section><h2>Configure Wi-Fi</h2><div class='notice'><strong>Fast import:</strong> browsers cannot read saved Wi-Fi passwords directly, but many phones and PCs can copy or share a saved network as text or a QR payload. Paste that copied Wi-Fi share text here, use the clipboard button below, or pick a nearby SSID from the scan dropdown.</div>");
     html += F("<label for='ssid-select'>Nearby networks</label><select id='ssid-select'><option value=''>Scan to choose a nearby network</option></select><div class='action-row'><button type='button' class='secondary' id='scan-networks'>Refresh nearby networks</button></div>");
     html += F("<label for='wifi-import'>Wi-Fi share text or QR payload</label><textarea id='wifi-import' placeholder='Examples: WIFI:T:WPA;S:GreenhouseNet;P:secret123;; or ssid=GreenhouseNet password=secret123'></textarea>");
@@ -1080,8 +1305,15 @@ class GreenhouseController {
     html += F("<form method='post' action='/wifi/reset'><button type='submit'>Forget Saved Wi-Fi</button></form>");
     html += F("<script>(function(){const ssid=document.getElementById('ssid');const password=document.getElementById('password');const networkSelect=document.getElementById('ssid-select');const scanButton=document.getElementById('scan-networks');const importBox=document.getElementById('wifi-import');const importStatus=document.getElementById('import-status');const clipboardButton=document.getElementById('import-clipboard');const importButton=document.getElementById('import-text');let scanRetryTimer=0;function setStatus(message){importStatus.textContent=message;}function applyParsed(parsed,sourceLabel){ssid.value=parsed.ssid||'';password.value=parsed.password||'';if(parsed.ssid){ssid.focus();}setStatus('Imported Wi-Fi details from '+sourceLabel+'. Review and press Save Wi-Fi.');}function unescapeWifiValue(value){let result='';let escaping=false;for(let index=0;index<value.length;index+=1){const ch=value[index];if(escaping){result+=ch;escaping=false;continue;}if(ch==='\\'){escaping=true;continue;}result+=ch;}if(escaping){result+='\\';}return result;}function readValue(text,keyNames){const lower=text.toLowerCase();for(let index=0;index<keyNames.length;index+=1){const keyName=keyNames[index];let marker=keyName+'=';let start=lower.indexOf(marker);if(start>=0){start+=marker.length;let end=start;while(end<text.length&&text[end]!==';'&&text[end]!==','&&text.charCodeAt(end)!==10&&text.charCodeAt(end)!==13){end+=1;}return text.substring(start,end).trim();}marker=keyName+':';start=lower.indexOf(marker);if(start>=0){start+=marker.length;let end=start;while(end<text.length&&text[end]!==';'&&text[end]!==','&&text.charCodeAt(end)!==10&&text.charCodeAt(end)!==13){end+=1;}return text.substring(start,end).trim();}}return '';}function parseWifiPayload(rawText){const text=rawText.trim();if(!text){return {error:'Paste or copy Wi-Fi share text first.'};}if(text.indexOf('WIFI:')===0){const fields=text.substring(5).split(';');let wifiSsid='';let wifiPassword='';for(let index=0;index<fields.length;index+=1){const field=fields[index];const colonIndex=field.indexOf(':');if(colonIndex<=0){continue;}const key=field.substring(0,colonIndex).toUpperCase();const value=unescapeWifiValue(field.substring(colonIndex+1));if(key==='S'){wifiSsid=value;}if(key==='P'){wifiPassword=value;}}if(wifiSsid){return {ssid:wifiSsid,password:wifiPassword};}}try{const json=JSON.parse(text);if(json&&typeof json==='object'&&typeof json.ssid==='string'){return {ssid:json.ssid,password:typeof json.password==='string'?json.password:''};}}catch(_error){}const parsedSsid=readValue(text,['ssid']);const parsedPassword=readValue(text,['password','pass','psk','key']);if(parsedSsid){return {ssid:parsedSsid,password:parsedPassword};}return {error:'Could not parse Wi-Fi details. Paste a standard Wi-Fi QR string like WIFI:T:WPA;S:MySSID;P:MyPassword;; or text with ssid= and password=.'};}function populateNetworks(networks){networkSelect.innerHTML='';const promptOption=new Option('Choose a nearby network','');networkSelect.add(promptOption);for(let index=0;index<networks.length;index+=1){const network=networks[index];const label=network.ssid+(network.secure?'':' (open)')+' ['+network.rssi+' dBm]';const option=new Option(label,network.ssid,false,network.ssid===ssid.value);networkSelect.add(option);}if(ssid.value){networkSelect.value=ssid.value;}}function scheduleScanRetry(){if(scanRetryTimer){return;}scanRetryTimer=window.setTimeout(function(){scanRetryTimer=0;refreshNetworks(false);},1500);}function refreshNetworks(forceRefresh){scanButton.disabled=true;setStatus('Checking nearby Wi-Fi networks...');fetch(forceRefresh?'/api/wifi/scan?refresh=1':'/api/wifi/scan',{cache:'no-store'}).then(function(response){return response.json().then(function(payload){return {response:response,payload:payload};});}).then(function(result){if(!result.response.ok){throw new Error(result.payload&&result.payload.error?result.payload.error:'scan failed');}const payload=result.payload||{};const networks=Array.isArray(payload.networks)?payload.networks:[];populateNetworks(networks);if(payload.connected&&!ssid.value){ssid.value=payload.connected;}if(networks.length){setStatus('Pick a nearby network from the dropdown or import Wi-Fi share text.');return;}if(payload.refreshing){setStatus('Scanning nearby Wi-Fi networks. The list will update automatically.');scheduleScanRetry();return;}setStatus(payload.error||'No nearby networks were found. You can still type or import the Wi-Fi details manually.');}).catch(function(){setStatus('Nearby network scan failed. You can still type or import the Wi-Fi details manually.');}).finally(function(){scanButton.disabled=false;});}function importFromClipboard(){if(!navigator.clipboard||!navigator.clipboard.readText){setStatus('Clipboard import is not available in this browser. Paste the Wi-Fi share text into the box instead.');return;}navigator.clipboard.readText().then(function(text){importBox.value=text;importFromText('clipboard');}).catch(function(){setStatus('Clipboard access was blocked. Paste the Wi-Fi share text into the box instead.');});}function importFromText(sourceLabel){const parsed=parseWifiPayload(importBox.value);if(parsed.error){setStatus(parsed.error);return;}applyParsed(parsed,sourceLabel);}clipboardButton.addEventListener('click',function(){importFromClipboard();});importButton.addEventListener('click',function(){importFromText('pasted text');});scanButton.addEventListener('click',function(){refreshNetworks(true);});networkSelect.addEventListener('change',function(){if(networkSelect.value){ssid.value=networkSelect.value;ssid.focus();setStatus('Selected nearby network. Type or import only the password now.');}});refreshNetworks(false);})();</script></section>");
     html += F("<section><h2>Update Firmware</h2><p class='muted'>Upload the latest <code>firmware.bin</code> over Wi-Fi once the node is installed. Use stable power, keep USB as the recovery path, and do not start an update during weather that may need immediate vent control.</p><form method='post' action='/update' enctype='multipart/form-data'><label for='firmware'>Firmware binary</label><input id='firmware' name='firmware' type='file' accept='.bin,application/octet-stream' required><button type='submit'>Install Firmware Update</button></form></section>");
+    if (WiFi.status() == WL_CONNECTED) {
+      html += buildLiveDashboardScript();
+    }
     html += F("</main></body></html>");
     return html;
+  }
+
+  String buildLiveDashboardScript() const {
+    return F("<script>(function(){const statusEl=document.getElementById('control-status');if(!statusEl){return;}const modeButtons=document.querySelectorAll('[data-mode]');const actuatorButtons=document.querySelectorAll('[data-actuator]');function setText(id,text){const el=document.getElementById(id);if(el){el.textContent=text;}}function fmtNumber(value,digits,suffix){return typeof value==='number'&&isFinite(value)?value.toFixed(digits)+suffix:'N/A';}function fmtWhole(value,suffix){return typeof value==='number'&&isFinite(value)?String(Math.round(value))+suffix:'N/A';}function fmtDuration(ms){if(typeof ms!=='number'||!isFinite(ms)){return 'N/A';}const totalSeconds=Math.floor(ms/1000);const hours=Math.floor(totalSeconds/3600);const minutes=Math.floor((totalSeconds%3600)/60);const seconds=totalSeconds%60;return hours+'h '+minutes+'m '+seconds+'s';}async function postForm(url,fields){const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:new URLSearchParams(fields).toString(),cache:'no-store'});const payload=await response.json().catch(function(){return {ok:false,message:'Controller returned invalid JSON.'};});if(!response.ok&&(!payload||!payload.message)){payload={ok:false,message:'Request failed.'};}return payload;}function applyState(state){setText('live-mode',state&&state.mode?state.mode:'N/A');setText('live-controller',state&&state.controller_state?state.controller_state:'N/A');setText('manual-flag',state&&state.manual_override&&state.manual_override.active?'ACTIVE':'OFF');setText('live-air',state&&state.air&&state.air.available?fmtNumber(state.air.temp_c,1,' C')+' / '+fmtWhole(state.air.humidity_pct,' %'):'N/A');setText('live-water',state&&state.water&&state.water.available?fmtNumber(state.water.temp_c,1,' C'):'N/A');setText('live-light',state&&state.light&&state.light.available?fmtWhole(state.light.lux,' lux'):'N/A');setText('live-battery',state&&state.battery&&state.battery.available?fmtWhole(state.battery.percent,' %')+' / '+fmtNumber(state.battery.voltage_v,2,' V'):'N/A');setText('live-uptime',state?fmtDuration(state.uptime_ms):'N/A');setText('actuator-top',state&&state.actuators&&state.actuators.top_open?'OPEN':'SHUT');setText('actuator-bottom',state&&state.actuators&&state.actuators.bottom_open?'OPEN':'SHUT');setText('actuator-exhaust',state&&state.actuators&&state.actuators.fan_exhaust?'ON':'OFF');setText('actuator-intake',state&&state.actuators&&state.actuators.fan_intake?'ON':'OFF');setText('actuator-defogger',state&&state.actuators&&state.actuators.defogger?'ON':'OFF');setText('actuator-grow-light',state&&state.actuators&&state.actuators.grow_light?'ON':'OFF');setText('actuator-circulation',state&&state.actuators&&state.actuators.circulation?'ON':'OFF');if(state&&state.safe_mode&&state.safe_mode.active){statusEl.textContent='Safe mode active: '+state.safe_mode.reason+'. Live commands are locked until the fault clears.';return;}if(state&&state.manual_override&&state.manual_override.active){statusEl.textContent='Manual override active. Return to Auto to hand control back to greenhouse logic.';return;}statusEl.textContent='Live dashboard connected. Controls are available over normal LAN access.';}async function refreshState(){try{const response=await fetch('/api/state',{cache:'no-store'});const state=await response.json();applyState(state);}catch(error){statusEl.textContent='Live refresh failed. Reload after the node settles on Wi-Fi.';}}modeButtons.forEach(function(button){button.addEventListener('click',async function(){statusEl.textContent='Sending controller mode command...';const payload=await postForm('/api/control/mode',{mode:button.getAttribute('data-mode')||''});statusEl.textContent=payload&&payload.message?payload.message:'Mode command sent.';refreshState();});});actuatorButtons.forEach(function(button){button.addEventListener('click',async function(){statusEl.textContent='Sending actuator command...';const payload=await postForm('/api/control/actuator',{actuator:button.getAttribute('data-actuator')||'',state:button.getAttribute('data-state')||''});statusEl.textContent=payload&&payload.message?payload.message:'Actuator command sent.';refreshState();});});refreshState();window.setInterval(refreshState,2000);})();</script>");
   }
 
   String htmlEscape(const char *value) const {
@@ -1183,6 +1415,7 @@ class GreenhouseController {
 
   void setMode(ControlMode mode) {
     mode_ = mode;
+    manualOverrideActive_ = false;
     preferences_.putUChar("mode", static_cast<uint8_t>(mode_));
     publishModeCommandState();
     renderDisplay(true);
@@ -1300,6 +1533,10 @@ class GreenhouseController {
         hasTime,
         currentMinute,
     });
+
+    if (manualOverrideActive_) {
+      actuators_ = manualActuators_;
+    }
   }
 
   void applyActuatorState() {
@@ -1721,6 +1958,7 @@ class GreenhouseController {
       recordDiagnosticEvent(DiagnosticCode::safeModeEntered, static_cast<int32_t>(reason));
     }
     safeMode_ = true;
+    manualOverrideActive_ = false;
     safeModeReason_ = reason;
   }
 
@@ -2040,7 +2278,7 @@ class GreenhouseController {
     const RecentFaultEntry latestFault = latestRecentFault();
     snprintf(payload,
              payloadSize,
-             "{\"mode\":\"%s\",\"controller_state\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"age_ms\":%lu,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"calibrated\":%s,\"sensor\":\"VBAT_Read\",\"adc_ctrl_pin\":%d,\"raw_mv\":%lu,\"voltage_v\":%.2f,\"percent\":%d,\"band\":\"%s\",\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"diagnostics\":{\"recent_fault_count\":%u,\"recent_fault\":{\"code\":\"%s\",\"detail\":%ld,\"at_ms\":%lu,\"boot_count\":%lu},\"sensor_errors\":{\"air\":%lu,\"bme\":%lu,\"dht\":%lu,\"light\":%lu,\"water\":%lu},\"servo\":{\"blocked_commands\":%lu,\"last_move_ms\":%lu,\"longest_move_ms\":%lu}},\"power_budget\":{\"servo_moves\":%s,\"vent_fans\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"commands\":{\"mode\":{\"enabled\":%s,\"requested\":\"%s\",\"status\":\"%s\",\"applied\":\"%s\",\"received_at_ms\":%lu}},\"lora\":{\"session_id\":%lu,\"queue_depth\":%u,\"queue_warning_active\":%s,\"queue_warnings\":%lu,\"max_queue_depth\":%lu,\"last_queue_warning_at_ms\":%lu,\"sent\":%lu,\"acknowledged\":%lu,\"ack_timeouts\":%lu,\"dropped\":%lu,\"last_dropped_sequence\":%lu,\"last_dropped_at_ms\":%lu,\"duplicate_inbound\":%lu,\"invalid_inbound\":%lu,\"last_rssi_dbm\":%d,\"last_snr_db\":%.2f,\"last_error_code\":%d},\"uptime_ms\":%lu}",
+             "{\"mode\":\"%s\",\"controller_state\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"age_ms\":%lu,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"calibrated\":%s,\"sensor\":\"VBAT_Read\",\"adc_ctrl_pin\":%d,\"raw_mv\":%lu,\"voltage_v\":%.2f,\"percent\":%d,\"band\":\"%s\",\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"diagnostics\":{\"recent_fault_count\":%u,\"recent_fault\":{\"code\":\"%s\",\"detail\":%ld,\"at_ms\":%lu,\"boot_count\":%lu},\"sensor_errors\":{\"air\":%lu,\"bme\":%lu,\"dht\":%lu,\"light\":%lu,\"water\":%lu},\"servo\":{\"blocked_commands\":%lu,\"last_move_ms\":%lu,\"longest_move_ms\":%lu}},\"power_budget\":{\"servo_moves\":%s,\"vent_fans\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"manual_override\":{\"active\":%s},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"commands\":{\"mode\":{\"enabled\":%s,\"requested\":\"%s\",\"status\":\"%s\",\"applied\":\"%s\",\"received_at_ms\":%lu}},\"lora\":{\"session_id\":%lu,\"queue_depth\":%u,\"queue_warning_active\":%s,\"queue_warnings\":%lu,\"max_queue_depth\":%lu,\"last_queue_warning_at_ms\":%lu,\"sent\":%lu,\"acknowledged\":%lu,\"ack_timeouts\":%lu,\"dropped\":%lu,\"last_dropped_sequence\":%lu,\"last_dropped_at_ms\":%lu,\"duplicate_inbound\":%lu,\"invalid_inbound\":%lu,\"last_rssi_dbm\":%d,\"last_snr_db\":%.2f,\"last_error_code\":%d},\"uptime_ms\":%lu}",
              modeLabel(),
              GreenhouseRuntime::controllerStateLabel(controllerState_),
              safeMode_ ? "true" : "false",
@@ -2090,6 +2328,7 @@ class GreenhouseController {
              powerBudget_.allowDefogger ? "true" : "false",
              powerBudget_.allowGrowLight ? "true" : "false",
              powerBudget_.allowCirculation ? "true" : "false",
+             manualOverrideActive_ ? "true" : "false",
              effectiveActuators_.topVentOpen ? "true" : "false",
              effectiveActuators_.bottomVentOpen ? "true" : "false",
              effectiveActuators_.exhaustFanOn ? "true" : "false",
@@ -2198,6 +2437,7 @@ class GreenhouseController {
   BatteryState battery_;
   ActuatorState actuators_;
   ActuatorState effectiveActuators_;
+  ActuatorState manualActuators_;
   ControlMode mode_ = ControlMode::automatic;
   ControllerState controllerState_ = ControllerState::automatic;
   PowerBudget powerBudget_{};
@@ -2214,6 +2454,7 @@ class GreenhouseController {
   bool mdnsActive_ = false;
   bool discoveryPublished_ = false;
   bool safeMode_ = false;
+  bool manualOverrideActive_ = false;
   bool bootHealthy_ = false;
   bool rehomeAfterUnsafeReset_ = false;
   CommandAudit lastCommandAudit_{};

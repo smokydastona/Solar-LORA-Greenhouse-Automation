@@ -36,8 +36,9 @@ This is the build sequence for the complete first-generation controller system i
 4. Verify the serial console starts at 115200 baud.
 5. If no Wi-Fi credentials are preloaded, verify the board starts its setup AP, note the broadcast SSID and password from serial or OLED, join that AP, and then open `http://192.168.4.1/` manually. The node no longer relies on captive-portal auto-launch because some phones and PCs open unrelated connectivity-check pages instead.
 6. Save the target greenhouse Wi-Fi credentials through the node web page and let the board restart. Use the nearby-network scan dropdown to choose the SSID locally, then either type only the password or use the portal's import box or clipboard button if your phone or PC can copy or share a saved Wi-Fi network as text or QR data. The portal now shows the configured station target and whether a password is stored, and it will refuse a blank password for nearby secured networks.
-7. After restart, verify the node dashboard is reachable on the address shown by the board, and then verify the browser-based firmware upload page using a known-good `firmware.bin` if you want in-place updates after installation.
-8. If LoRa transport is enabled in [../include/Settings.h](../include/Settings.h), confirm the configured radio frequency matches your legal regional band before first on-air transmission.
+7. After restart, verify the node dashboard is reachable on the address shown by the board. In station mode the page now switches from setup-only onboarding into a live dashboard with current telemetry, mode buttons, and per-output manual override controls.
+8. Verify the browser-based firmware upload page using a known-good `firmware.bin` if you want in-place updates after installation. If you browse from a phone or laptop running a VPN, the node firmware will still answer on the LAN, but some VPN clients block local subnet access on the client side.
+9. If LoRa transport is enabled in [../include/Settings.h](../include/Settings.h), confirm the configured radio frequency matches your legal regional band before first on-air transmission.
 
 ## Stage 2: wire the sensor bus
 
