@@ -482,6 +482,7 @@ class GreenhouseController {
     preferences_.begin("greenhouse", false);
     mode_ = static_cast<ControlMode>(preferences_.getUChar("mode", static_cast<uint8_t>(ControlMode::automatic)));
     loadClimateConfig();
+    loadDisplayConfig();
 
     bootCount_ = preferences_.getUInt("boot_count", 0U) + 1U;
     preferences_.putUInt("boot_count", bootCount_);
@@ -567,6 +568,16 @@ class GreenhouseController {
     runtimeClimate_ = candidate;
   }
 
+  void loadDisplayConfig() {
+    animatedScreenSaverEnabled_ = Settings::OLED.animatedScreenSaverDefault;
+    displayOverrideActive_ = preferences_.isKey("oled_anim");
+    if (!displayOverrideActive_) {
+      return;
+    }
+
+    animatedScreenSaverEnabled_ = preferences_.getBool("oled_anim", Settings::OLED.animatedScreenSaverDefault);
+  }
+
   void saveClimateConfig(const ClimateConfig &climate) {
     preferences_.putBool("cl_override", true);
     preferences_.putFloat("cl_v_open", climate.ventOpenTempC);
@@ -584,6 +595,13 @@ class GreenhouseController {
     climateOverrideActive_ = true;
   }
 
+  void saveDisplayConfig(bool animatedEnabled) {
+    preferences_.putBool("oled_anim", animatedEnabled);
+    animatedScreenSaverEnabled_ = animatedEnabled;
+    displayOverrideActive_ = true;
+    applyDisplaySleepPresentation(millis());
+  }
+
   void clearClimateConfigOverride() {
     preferences_.remove("cl_override");
     preferences_.remove("cl_v_open");
@@ -599,6 +617,13 @@ class GreenhouseController {
     preferences_.remove("cl_light_lux");
     runtimeClimate_ = Settings::CLIMATE;
     climateOverrideActive_ = false;
+  }
+
+  void clearDisplayConfigOverride() {
+    preferences_.remove("oled_anim");
+    animatedScreenSaverEnabled_ = Settings::OLED.animatedScreenSaverDefault;
+    displayOverrideActive_ = false;
+    applyDisplaySleepPresentation(millis());
   }
 
   void initReliability() {
@@ -835,6 +860,9 @@ class GreenhouseController {
     webServer_.on("/api/settings/climate", HTTP_GET, [this]() { handleClimateSettingsRequest(); });
     webServer_.on("/api/settings/climate", HTTP_POST, [this]() { handleClimateSettingsSaveRequest(); });
     webServer_.on("/api/settings/climate/reset", HTTP_POST, [this]() { handleClimateSettingsResetRequest(); });
+    webServer_.on("/api/settings/display", HTTP_GET, [this]() { handleDisplaySettingsRequest(); });
+    webServer_.on("/api/settings/display", HTTP_POST, [this]() { handleDisplaySettingsSaveRequest(); });
+    webServer_.on("/api/settings/display/reset", HTTP_POST, [this]() { handleDisplaySettingsResetRequest(); });
     webServer_.on("/api/wifi/scan", HTTP_GET, [this]() { handleWifiScanRequest(); });
     webServer_.on("/wifi", HTTP_POST, [this]() { handleWifiSaveRequest(); });
     webServer_.on("/wifi/reset", HTTP_POST, [this]() { handleWifiResetRequest(); });
@@ -881,9 +909,16 @@ class GreenhouseController {
     webServer_.send(200, "application/json; charset=utf-8", payload);
   }
 
+  void handleDisplaySettingsRequest() {
+    String payload;
+    buildDisplaySettingsPayload(payload, true, "");
+    webServer_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    webServer_.send(200, "application/json; charset=utf-8", payload);
+  }
+
   void handleClimateSettingsSaveRequest() {
     String authError;
-    if (!authorizeClimateSettingsEdit(authError)) {
+    if (!authorizeDashboardSettingsEdit(authError)) {
       sendClimateSettingsResponse(403, false, authError.c_str());
       return;
     }
@@ -907,9 +942,26 @@ class GreenhouseController {
     sendClimateSettingsResponse(200, true, "Climate thresholds saved.");
   }
 
+  void handleDisplaySettingsSaveRequest() {
+    String authError;
+    if (!authorizeDashboardSettingsEdit(authError)) {
+      sendDisplaySettingsResponse(403, false, authError.c_str());
+      return;
+    }
+
+    bool animatedEnabled = false;
+    if (!parseDisplayIdleModeArg(animatedEnabled, authError)) {
+      sendDisplaySettingsResponse(400, false, authError.c_str());
+      return;
+    }
+
+    saveDisplayConfig(animatedEnabled);
+    sendDisplaySettingsResponse(200, true, "Display idle mode saved.");
+  }
+
   void handleClimateSettingsResetRequest() {
     String authError;
-    if (!authorizeClimateSettingsEdit(authError)) {
+    if (!authorizeDashboardSettingsEdit(authError)) {
       sendClimateSettingsResponse(403, false, authError.c_str());
       return;
     }
@@ -918,6 +970,17 @@ class GreenhouseController {
     applyConfigurationSafety();
     refreshControlOutputs();
     sendClimateSettingsResponse(200, true, "Climate thresholds restored to firmware defaults.");
+  }
+
+  void handleDisplaySettingsResetRequest() {
+    String authError;
+    if (!authorizeDashboardSettingsEdit(authError)) {
+      sendDisplaySettingsResponse(403, false, authError.c_str());
+      return;
+    }
+
+    clearDisplayConfigOverride();
+    sendDisplaySettingsResponse(200, true, "Display idle mode restored to firmware defaults.");
   }
 
   void handleModeControlRequest() {
@@ -1059,15 +1122,15 @@ class GreenhouseController {
     renderDisplay(true);
   }
 
-  bool authorizeClimateSettingsEdit(String &message) {
+  bool authorizeDashboardSettingsEdit(String &message) {
     if (WiFi.status() != WL_CONNECTED) {
-      message = "Climate settings can only be edited from the station dashboard after the node joins Wi-Fi.";
+      message = "Dashboard settings can only be edited after the node joins station Wi-Fi.";
       return false;
     }
 
     const String password = webServer_.arg("password");
     if (password.length() == 0) {
-      message = "Enter the station Wi-Fi password to save climate settings.";
+      message = "Enter the station Wi-Fi password to save dashboard settings.";
       return false;
     }
 
@@ -1079,6 +1142,23 @@ class GreenhouseController {
     }
 
     return true;
+  }
+
+  bool parseDisplayIdleModeArg(bool &animatedEnabled, String &message) {
+    String value = webServer_.arg("idle_mode");
+    value.trim();
+    value.toLowerCase();
+    if (value == F("animated") || value == F("screensaver")) {
+      animatedEnabled = true;
+      return true;
+    }
+    if (value == F("blank") || value == F("off") || value == F("blank_screen")) {
+      animatedEnabled = false;
+      return true;
+    }
+
+    message = "Invalid display idle mode. Use blank or animated.";
+    return false;
   }
 
   bool parseClimateSettingsFromRequest(ClimateConfig &climate, String &message) {
@@ -1185,9 +1265,36 @@ class GreenhouseController {
     payload += F("}}");
   }
 
+  void buildDisplaySettingsPayload(String &payload, bool ok, const char *message) const {
+    payload.remove(0);
+    payload.reserve(320);
+    payload += F("{\"ok\":");
+    payload += ok ? F("true") : F("false");
+    payload += F(",\"message\":\"");
+    payload += jsonEscape(message == nullptr ? "" : message);
+    payload += F("\",\"override_active\":");
+    payload += displayOverrideActive_ ? F("true") : F("false");
+    payload += F(",\"settings_auth\":\"station_or_setup_password\",\"display\":{\"idle_mode\":\"");
+    payload += animatedScreenSaverEnabled_ ? F("animated") : F("blank");
+    payload += F("\",\"normal_timeout_ms\":");
+    payload += String(Settings::OLED.screenSaverTimeoutMs);
+    payload += F(",\"safe_mode_timeout_ms\":");
+    payload += String(Settings::OLED.safeModeScreenSaverTimeoutMs);
+    payload += F(",\"sleeping\":");
+    payload += displaySleeping_ ? F("true") : F("false");
+    payload += F("}}");
+  }
+
   void sendClimateSettingsResponse(int statusCode, bool ok, const char *message) {
     String payload;
     buildClimateSettingsPayload(payload, ok, message);
+    webServer_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    webServer_.send(statusCode, "application/json; charset=utf-8", payload);
+  }
+
+  void sendDisplaySettingsResponse(int statusCode, bool ok, const char *message) {
+    String payload;
+    buildDisplaySettingsPayload(payload, ok, message);
     webServer_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     webServer_.send(statusCode, "application/json; charset=utf-8", payload);
   }
@@ -1512,19 +1619,23 @@ class GreenhouseController {
 
   String buildDashboardHtml() const {
     String html;
-    html.reserve(15000);
+    html.reserve(18000);
     html += F("<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>");
     html += F("<title>Mini Greenhouse Node</title><style>");
-    html += F("body{font-family:Arial,sans-serif;background:#eef3e5;color:#203020;margin:0;padding:20px;}main{max-width:860px;margin:0 auto;}section{background:#fff;border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:0 8px 24px rgba(0,0,0,.08);}h1,h2{margin:0 0 12px;} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;} .card{background:#f6f8f1;border-radius:12px;padding:12px;} label{display:block;font-weight:700;margin:10px 0 6px;} input,textarea,select{width:100%;padding:10px;border:1px solid #b9c6af;border-radius:10px;box-sizing:border-box;font:inherit;background:#fff;} textarea{min-height:88px;resize:vertical;} button{margin-top:12px;padding:10px 14px;border:none;border-radius:10px;background:#305c2b;color:#fff;font-weight:700;cursor:pointer;} button.secondary{background:#70836b;} .action-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;} .action-row button{margin-top:0;} .muted{color:#5b6956;} .notice{background:#f6f8f1;border-left:4px solid #769166;border-radius:12px;padding:12px 14px;margin:12px 0;} .status-note{min-height:1.4em;margin-top:10px;} a{color:#2f6f3e;} code{background:#edf3e7;padding:2px 6px;border-radius:6px;}</style></head><body><main>");
-    html += F("<section><h1>Mini Greenhouse Node</h1><p class='muted'>Local setup and dashboard for standalone greenhouse nodes.</p>");
+    html += F(":root{color-scheme:light;--bg:#ebf2e6;--panel:#ffffff;--panel-soft:#f4f8ef;--text:#1f3023;--muted:#5f705f;--line:#cad7c4;--accent:#2d6a3a;--accent-soft:#dcebd8;--ok:#337b46;--warn:#a7761e;--danger:#b44b5c;--shadow:0 18px 40px rgba(23,42,27,.12);}*{box-sizing:border-box;}body{margin:0;font-family:Georgia,'Times New Roman',serif;background:radial-gradient(circle at top,#f8fbf4 0,#edf4e8 42%,#dfe8d8 100%);color:var(--text);}body:before{content:'';position:fixed;inset:0;background:linear-gradient(135deg,rgba(78,117,72,.06),transparent 35%),linear-gradient(225deg,rgba(45,106,58,.08),transparent 40%);pointer-events:none;}main{position:relative;max-width:1080px;margin:0 auto;padding:24px 16px 48px;}section{background:rgba(255,255,255,.86);backdrop-filter:blur(6px);border:1px solid rgba(202,215,196,.92);border-radius:24px;padding:20px;margin-bottom:18px;box-shadow:var(--shadow);}h1,h2{margin:0 0 12px;}h3{margin:0 0 8px;color:#233828;}p{line-height:1.6;}a{color:var(--accent);}code{background:#edf4e7;padding:2px 6px;border-radius:6px;}.hero{background:linear-gradient(145deg,rgba(31,55,36,.96),rgba(67,108,66,.92));border:none;color:#f3f8ef;overflow:hidden;}.hero h1,.hero strong{color:#f7fbf4;}.hero p{color:#dbe8d8;}.hero-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:18px;align-items:start;}.kicker{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(240,247,233,.18);background:rgba(240,247,233,.10);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px;}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;}.card{background:var(--panel-soft);border-radius:16px;padding:14px;border:1px solid var(--line);} .hero .card{background:rgba(240,247,233,.12);border-color:rgba(240,247,233,.18);color:#f6fbf2;} .hero .card strong{display:block;font-size:1.6rem;line-height:1.15;margin-top:8px;} .hero .card span{display:block;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:#dce7d8;}label{display:block;font-weight:700;margin:10px 0 6px;}input,textarea,select{width:100%;padding:10px;border:1px solid #b9c6af;border-radius:12px;box-sizing:border-box;font:inherit;background:#fff;}textarea{min-height:88px;resize:vertical;}button{margin-top:12px;padding:10px 14px;border:none;border-radius:12px;background:linear-gradient(135deg,#2d6a3a,#3d8a4d);color:#fff;font-weight:700;cursor:pointer;}button.secondary{background:linear-gradient(135deg,#6d816d,#7f9380);} .action-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;} .action-row button{margin-top:0;} .muted{color:var(--muted);} .notice{background:linear-gradient(135deg,#eef6ea,#f8fbf5);border-left:5px solid #6b8d64;border-radius:14px;padding:12px 14px;margin:12px 0;} .status-note{min-height:1.4em;margin-top:10px;} .pill-row{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 0;} .pill{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;background:var(--accent-soft);border:1px solid rgba(45,106,58,.16);font-size:.88rem;font-weight:700;color:#21402a;} .pill.ok{background:#ddeadf;color:#245e32;border-color:rgba(51,123,70,.18);} .pill.warn{background:#f5e7cb;color:#76530f;border-color:rgba(167,118,30,.18);} .pill.danger{background:#f6dde2;color:#842738;border-color:rgba(180,75,92,.18);} .section-intro{margin-top:-4px;margin-bottom:14px;max-width:64ch;} @media (max-width:860px){.hero-grid{grid-template-columns:1fr;}} @media (max-width:640px){main{padding:16px 12px 40px;}section{padding:16px;border-radius:20px;}} </style></head><body><main>");
+    html += F("<section class='hero'><div class='hero-grid'><div><span class='kicker'>Greenhouse operator surface</span><h1>Mini Greenhouse Node</h1><p>Local setup, field-safe control, and live diagnostics for the ESP32-S3 greenhouse controller. This page stays node-local by design and keeps direct-solar airflow separate from controller-backed loads.</p><div class='pill-row'>");
+    html += safeMode_ ? F("<span class='pill danger'>Safe mode active</span>") : F("<span class='pill ok'>Safe mode clear</span>");
+    html += climateOverrideActive_ ? F("<span class='pill warn'>Dashboard climate override active</span>") : F("<span class='pill ok'>Firmware climate defaults active</span>");
+    html += manualOverrideActive_ ? F("<span class='pill warn'>Manual output hold active</span>") : F("<span class='pill ok'>Automatic output authority active</span>");
+    html += F("</div><div class='grid' style='margin-top:18px;'>");
     html += F("<div class='grid'>");
-    html += String("<div class='card'><strong>Firmware</strong><br>") + GreenhouseVersion::kFirmwareVersion + "</div>";
-    html += String("<div class='card'><strong>Mode</strong><br>") + modeLabel() + "</div>";
-    html += String("<div class='card'><strong>Controller</strong><br>") + GreenhouseRuntime::controllerStateLabel(controllerState_) + "</div>";
-    html += String("<div class='card'><strong>Health</strong><br>") + String(computeHealthScore()) + "%</div>";
-    html += F("</div></section>");
+    html += String("<div class='card'><span>Firmware</span><strong>") + GreenhouseVersion::kFirmwareVersion + "</strong></div>";
+    html += String("<div class='card'><span>Mode</span><strong>") + modeLabel() + "</strong></div>";
+    html += String("<div class='card'><span>Controller</span><strong>") + GreenhouseRuntime::controllerStateLabel(controllerState_) + "</strong></div>";
+    html += String("<div class='card'><span>Health</span><strong>") + String(computeHealthScore()) + "%</strong></div>";
+    html += F("</div></div><div class='card'><h3>Operator priorities</h3><p>Check safety, battery, and diagnostics before forcing outputs. Use AUTO to return authority to climate logic after any manual intervention.</p></div></div></section>");
 
-    html += F("<section><h2>Access</h2>");
+    html += F("<section><h2>Access and identity</h2><p class='muted section-intro'>Use the joined station address when Wi-Fi is available. If the node cannot join Wi-Fi, the setup access point remains the recovery path.</p>");
     if (WiFi.status() == WL_CONNECTED) {
       html += String("<p><strong>Connected Wi-Fi:</strong> ") + htmlEscape(wifiConfig_.ssid) + "</p>";
       html += String("<p><strong>Dashboard:</strong> <a href='http://") + htmlEscape(wifiConfig_.hostname) + F(".local/'>http://") + htmlEscape(wifiConfig_.hostname) + F(".local/</a></p>");
@@ -1544,7 +1655,10 @@ class GreenhouseController {
     }
     html += F("<p><strong>JSON API:</strong> <a href='/api/state'>/api/state</a></p></section>");
 
-    html += F("<section><h2>Status</h2><div class='grid'>");
+    html += F("<section id='operations'><h2>Operations snapshot</h2><p class='muted section-intro'>A fast field-read of climate, power, safety, and controller readiness before you take any manual action.</p><div class='pill-row'>");
+    html += filesystemReady_ ? F("<span class='pill ok'>LittleFS ready</span>") : F("<span class='pill danger'>LittleFS unavailable</span>");
+    html += battery_.critical ? F("<span class='pill danger'>Battery critical</span>") : (battery_.low ? F("<span class='pill warn'>Battery low</span>") : F("<span class='pill ok'>Battery within guard band</span>"));
+    html += F("</div><div class='grid'>");
     html += String("<div class='card'><strong>Air</strong><br>") + (snapshot_.airAvailable ? String(snapshot_.airTempC, 1) + "C / " + String(snapshot_.humidityPct, 0) + "%" : String("N/A")) + "</div>";
     html += String("<div class='card'><strong>Battery</strong><br>") + (battery_.available ? String(battery_.percent) + "% / " + String(battery_.voltageV, 2) + "V" : String("N/A")) + "</div>";
     html += String("<div class='card'><strong>Safe Mode</strong><br>") + (safeMode_ ? safeModeReasonLabel(safeModeReason_) : "OFF") + "</div>";
@@ -1581,6 +1695,7 @@ class GreenhouseController {
       html += String("<div class='card'><strong>Humidity Fan</strong><br>") + String(runtimeClimate_.humidityFanOffPct, 0) + "% to " + String(runtimeClimate_.humidityFanOnPct, 0) + "%</div>";
       html += String("<div class='card'><strong>Defogger Window</strong><br>") + String(runtimeClimate_.heaterOnTempC, 1) + "C to " + String(runtimeClimate_.heaterOffTempC, 1) + "C</div>";
       html += String("<div class='card'><strong>Grow Light Window</strong><br>") + String(runtimeClimate_.growLightStartMinutes / 60U) + ":" + String(runtimeClimate_.growLightStartMinutes % 60U < 10U ? "0" : "") + String(runtimeClimate_.growLightStartMinutes % 60U) + " to " + String(runtimeClimate_.growLightStopMinutes / 60U) + ":" + String(runtimeClimate_.growLightStopMinutes % 60U < 10U ? "0" : "") + String(runtimeClimate_.growLightStopMinutes % 60U) + "</div>";
+      html += String("<div class='card'><strong>OLED Idle</strong><br>") + displayIdleModeLabel() + "<br>Normal: " + String(Settings::OLED.screenSaverTimeoutMs / 60000UL) + " min<br>Safe: " + String(Settings::OLED.safeModeScreenSaverTimeoutMs / 60000UL) + " min</div>";
       html += String("<div class='card'><strong>Power Guards</strong><br>Low: ") + String(Settings::BATTERY.lowVoltage, 2) + "V<br>Critical: " + String(Settings::BATTERY.criticalVoltage, 2) + "V</div>";
       html += F("</div></section>");
 
@@ -1600,6 +1715,15 @@ class GreenhouseController {
       html += String("<div class='card'><label for='water-low-temp'>Water low temp C</label><input id='water-low-temp' type='number' step='0.1' value='") + String(runtimeClimate_.waterLowTempC, 1) + "'></div>";
       html += String("<div class='card'><label for='grow-light-lux'>Grow-light lux threshold</label><input id='grow-light-lux' type='number' step='1' value='") + String(runtimeClimate_.growLightLuxThreshold, 0) + "'></div>";
       html += F("</div><div class='action-row'><button type='button' id='save-climate-settings'>Save Climate Settings</button><button type='button' class='secondary' id='reset-climate-settings'>Restore Firmware Defaults</button></div><p id='settings-status' class='muted status-note'>Climate thresholds are loaded from the active controller profile.</p></section>");
+
+      html += F("<section><h2>Display Settings</h2><p class='muted'>Choose whether OLED idle time goes to a fully blank screen or the animated low-contrast screensaver. Editing requires the current station Wi-Fi password or the node setup password.</p>");
+      html += String("<p class='muted'>Active display source: <strong>") + (displayOverrideActive_ ? "dashboard override" : "firmware defaults") + "</strong></p>";
+      html += F("<div class='grid'>");
+      html += F("<div class='card'><label for='display-settings-password'>Settings password</label><input id='display-settings-password' type='password' autocomplete='current-password' placeholder='Station Wi-Fi password'></div>");
+      html += F("<div class='card'><label for='display-idle-mode'>Idle OLED behavior</label><select id='display-idle-mode'><option value='blank'>Blank screen</option><option value='animated'>Animated screensaver</option></select></div>");
+      html += String("<div class='card'><strong>Normal idle timeout</strong><br>") + String(Settings::OLED.screenSaverTimeoutMs / 1000UL) + " seconds</div>";
+      html += String("<div class='card'><strong>Safe-mode idle timeout</strong><br>") + String(Settings::OLED.safeModeScreenSaverTimeoutMs / 1000UL) + " seconds</div>";
+      html += F("</div><div class='action-row'><button type='button' id='save-display-settings'>Save Display Settings</button><button type='button' class='secondary' id='reset-display-settings'>Restore Firmware Defaults</button></div><p id='display-settings-status' class='muted status-note'>Blank screen is the firmware default OLED idle behavior.</p></section>");
     }
 
     html += F("<section><h2>Configure Wi-Fi</h2><div class='notice'><strong>Fast import:</strong> browsers cannot read saved Wi-Fi passwords directly, but many phones and PCs can copy or share a saved network as text or a QR payload. Paste that copied Wi-Fi share text here, use the clipboard button below, or pick a nearby SSID from the scan dropdown.</div>");
@@ -1620,6 +1744,7 @@ class GreenhouseController {
     if (WiFi.status() == WL_CONNECTED) {
       html += buildLiveDashboardScript();
       html += buildClimateSettingsScript();
+      html += buildDisplaySettingsScript();
     }
     html += F("</main></body></html>");
     return html;
@@ -1631,6 +1756,10 @@ class GreenhouseController {
 
   String buildClimateSettingsScript() const {
     return F("<script>(function(){const statusEl=document.getElementById('settings-status');if(!statusEl){return;}const saveButton=document.getElementById('save-climate-settings');const resetButton=document.getElementById('reset-climate-settings');const passwordEl=document.getElementById('settings-password');const fields={vent_open_temp_c:document.getElementById('vent-open-temp'),vent_close_temp_c:document.getElementById('vent-close-temp'),fan_on_temp_c:document.getElementById('fan-on-temp'),fan_off_temp_c:document.getElementById('fan-off-temp'),humidity_fan_on_pct:document.getElementById('humidity-fan-on'),humidity_fan_off_pct:document.getElementById('humidity-fan-off'),heater_on_temp_c:document.getElementById('heater-on-temp'),heater_off_temp_c:document.getElementById('heater-off-temp'),water_high_temp_c:document.getElementById('water-high-temp'),water_low_temp_c:document.getElementById('water-low-temp'),grow_light_lux_threshold:document.getElementById('grow-light-lux')};function setValue(id,value,digits){const el=fields[id];if(el&&typeof value==='number'&&isFinite(value)){el.value=digits>=0?value.toFixed(digits):String(value);}}function applyPayload(payload){if(!payload||!payload.climate){return;}setValue('vent_open_temp_c',payload.climate.vent_open_temp_c,1);setValue('vent_close_temp_c',payload.climate.vent_close_temp_c,1);setValue('fan_on_temp_c',payload.climate.fan_on_temp_c,1);setValue('fan_off_temp_c',payload.climate.fan_off_temp_c,1);setValue('humidity_fan_on_pct',payload.climate.humidity_fan_on_pct,1);setValue('humidity_fan_off_pct',payload.climate.humidity_fan_off_pct,1);setValue('heater_on_temp_c',payload.climate.heater_on_temp_c,1);setValue('heater_off_temp_c',payload.climate.heater_off_temp_c,1);setValue('water_high_temp_c',payload.climate.water_high_temp_c,1);setValue('water_low_temp_c',payload.climate.water_low_temp_c,1);setValue('grow_light_lux_threshold',payload.climate.grow_light_lux_threshold,0);}async function postSettings(url,body){const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:new URLSearchParams(body).toString(),cache:'no-store'});const payload=await response.json().catch(function(){return {ok:false,message:'Controller returned invalid settings JSON.'};});if(payload){applyPayload(payload);}statusEl.textContent=payload&&payload.message?payload.message:'Settings request finished.';}saveButton.addEventListener('click',async function(){const password=passwordEl&&passwordEl.value?passwordEl.value:'';const body={password:password};Object.keys(fields).forEach(function(key){body[key]=fields[key]&&fields[key].value?fields[key].value:'';});statusEl.textContent='Saving climate thresholds...';await postSettings('/api/settings/climate',body);});resetButton.addEventListener('click',async function(){const password=passwordEl&&passwordEl.value?passwordEl.value:'';statusEl.textContent='Restoring firmware climate defaults...';await postSettings('/api/settings/climate/reset',{password:password});});})();</script>");
+  }
+
+  String buildDisplaySettingsScript() const {
+    return F("<script>(function(){const statusEl=document.getElementById('display-settings-status');if(!statusEl){return;}const saveButton=document.getElementById('save-display-settings');const resetButton=document.getElementById('reset-display-settings');const passwordEl=document.getElementById('display-settings-password');const modeEl=document.getElementById('display-idle-mode');function applyPayload(payload){if(!payload||!payload.display||!modeEl){return;}modeEl.value=payload.display.idle_mode==='animated'?'animated':'blank';}async function request(url,body){const options={cache:'no-store'};if(body){options.method='POST';options.headers={'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'};options.body=new URLSearchParams(body).toString();}const response=await fetch(url,options);const payload=await response.json().catch(function(){return {ok:false,message:'Controller returned invalid display settings JSON.'};});applyPayload(payload);statusEl.textContent=payload&&payload.message?payload.message:'Display settings request finished.';}saveButton.addEventListener('click',async function(){statusEl.textContent='Saving OLED idle behavior...';await request('/api/settings/display',{password:passwordEl&&passwordEl.value?passwordEl.value:'',idle_mode:modeEl&&modeEl.value?modeEl.value:'blank'});});resetButton.addEventListener('click',async function(){statusEl.textContent='Restoring firmware display defaults...';await request('/api/settings/display/reset',{password:passwordEl&&passwordEl.value?passwordEl.value:''});});request('/api/settings/display');})();</script>");
   }
 
   String htmlEscape(const char *value) const {
@@ -1751,6 +1880,29 @@ class GreenhouseController {
     }
   }
 
+  const char *displayIdleModeLabel() const {
+    return animatedScreenSaverEnabled_ ? "Animated" : "Blank";
+  }
+
+  void applyDisplaySleepPresentation(uint32_t now) {
+    if (!displayReady_ || !displaySleeping_) {
+      return;
+    }
+
+    if (animatedScreenSaverEnabled_) {
+      GreenhouseHal::setDisplayPower(display_, true);
+      GreenhouseHal::setDisplayContrast(display_, Settings::OLED.screenSaverContrast);
+      initScreenSaver(now);
+      renderDisplay(false);
+      lastDisplayAt_ = now;
+      return;
+    }
+
+    display_.clearDisplay();
+    display_.display();
+    GreenhouseHal::setDisplayPower(display_, false);
+  }
+
   void updateDisplaySleep(uint32_t now) {
     const uint32_t timeoutMs = safeMode_
                                    ? Settings::OLED.safeModeScreenSaverTimeoutMs
@@ -1762,11 +1914,8 @@ class GreenhouseController {
       return;
     }
 
-    GreenhouseHal::setDisplayContrast(display_, Settings::OLED.screenSaverContrast);
     displaySleeping_ = true;
-    initScreenSaver(now);
-    renderDisplay(false);
-    lastDisplayAt_ = now;
+    applyDisplaySleepPresentation(now);
   }
 
   void initScreenSaver(uint32_t now) {
@@ -2158,7 +2307,9 @@ class GreenhouseController {
       noteDisplayActivity(millis());
     }
     if (displaySleeping_) {
-      renderScreenSaver(millis());
+      if (animatedScreenSaverEnabled_) {
+        renderScreenSaver(millis());
+      }
       return;
     }
 
@@ -2660,10 +2811,10 @@ class GreenhouseController {
       return;
     }
 
-    publishHomeAssistantSensorDiscovery("sensor", "air_temp", "Air Temperature", "{{ value_json.air.temp_c }}", "temperature", "measurement", "°C");
+    publishHomeAssistantSensorDiscovery("sensor", "air_temp", "Air Temperature", "{{ value_json.air.temp_c }}", "temperature", "measurement", "-�C");
     publishHomeAssistantSensorDiscovery("sensor", "humidity", "Humidity", "{{ value_json.air.humidity_pct }}", "humidity", "measurement", "%");
     publishHomeAssistantSensorDiscovery("sensor", "vpd", "VPD", "{{ value_json.metrics.vpd_kpa }}", "", "measurement", "kPa");
-    publishHomeAssistantSensorDiscovery("sensor", "dew_point", "Dew Point", "{{ value_json.metrics.dew_point_c }}", "temperature", "measurement", "°C");
+    publishHomeAssistantSensorDiscovery("sensor", "dew_point", "Dew Point", "{{ value_json.metrics.dew_point_c }}", "temperature", "measurement", "-�C");
     publishHomeAssistantSensorDiscovery("sensor", "battery_percentage", "Battery Percentage", "{{ value_json.battery.percent }}", "battery", "measurement", "%");
     publishHomeAssistantSensorDiscovery("sensor", "health_score", "Health Score", "{{ value_json.health.score }}", "", "measurement", "%");
     publishHomeAssistantSensorDiscovery("sensor", "crop_status", "Crop Status", "{{ value_json.crop.status }}", "", "", "");
@@ -2789,7 +2940,7 @@ class GreenhouseController {
     const RecentFaultEntry latestFault = latestRecentFault();
     snprintf(payload,
              payloadSize,
-             "{\"mode\":\"%s\",\"controller_state\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"age_ms\":%lu,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"calibrated\":%s,\"sensor\":\"VBAT_Read\",\"adc_ctrl_pin\":%d,\"raw_mv\":%lu,\"voltage_v\":%.2f,\"percent\":%d,\"band\":\"%s\",\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"diagnostics\":{\"recent_fault_count\":%u,\"recent_fault\":{\"code\":\"%s\",\"detail\":%ld,\"at_ms\":%lu,\"boot_count\":%lu},\"sensor_errors\":{\"air\":%lu,\"bme\":%lu,\"dht\":%lu,\"light\":%lu,\"water\":%lu},\"servo\":{\"blocked_commands\":%lu,\"last_move_ms\":%lu,\"longest_move_ms\":%lu}},\"power_budget\":{\"servo_moves\":%s,\"vent_fans\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"manual_override\":{\"active\":%s},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"commands\":{\"mode\":{\"enabled\":%s,\"requested\":\"%s\",\"status\":\"%s\",\"applied\":\"%s\",\"received_at_ms\":%lu}},\"lora\":{\"session_id\":%lu,\"queue_depth\":%u,\"queue_warning_active\":%s,\"queue_warnings\":%lu,\"max_queue_depth\":%lu,\"last_queue_warning_at_ms\":%lu,\"sent\":%lu,\"acknowledged\":%lu,\"ack_timeouts\":%lu,\"dropped\":%lu,\"last_dropped_sequence\":%lu,\"last_dropped_at_ms\":%lu,\"duplicate_inbound\":%lu,\"invalid_inbound\":%lu,\"last_rssi_dbm\":%d,\"last_snr_db\":%.2f,\"last_error_code\":%d},\"uptime_ms\":%lu}",
+             "{\"mode\":\"%s\",\"controller_state\":\"%s\",\"safe_mode\":{\"active\":%s,\"reason\":\"%s\",\"boot_failures\":%u},\"reset_reason\":\"%s\",\"crop\":{\"profile\":\"%s\",\"status\":\"%s\"},\"air\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f,\"humidity_pct\":%.2f},\"water\":{\"available\":%s,\"age_ms\":%lu,\"temp_c\":%.2f},\"light\":{\"available\":%s,\"age_ms\":%lu,\"lux\":%.2f},\"metrics\":{\"vpd_kpa\":%.2f,\"dew_point_c\":%.2f,\"frost_risk\":%s},\"battery\":{\"available\":%s,\"calibrated\":%s,\"sensor\":\"VBAT_Read\",\"adc_ctrl_pin\":%d,\"raw_mv\":%lu,\"voltage_v\":%.2f,\"percent\":%d,\"band\":\"%s\",\"low\":%s,\"critical\":%s},\"health\":{\"score\":%d},\"diagnostics\":{\"recent_fault_count\":%u,\"recent_fault\":{\"code\":\"%s\",\"detail\":%ld,\"at_ms\":%lu,\"boot_count\":%lu},\"sensor_errors\":{\"air\":%lu,\"bme\":%lu,\"dht\":%lu,\"light\":%lu,\"water\":%lu},\"servo\":{\"blocked_commands\":%lu,\"last_move_ms\":%lu,\"longest_move_ms\":%lu}},\"power_budget\":{\"servo_moves\":%s,\"vent_fans\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"manual_override\":{\"active\":%s},\"display\":{\"idle_mode\":\"%s\",\"sleeping\":%s,\"normal_timeout_ms\":%lu,\"safe_mode_timeout_ms\":%lu},\"actuators\":{\"top_open\":%s,\"bottom_open\":%s,\"fan_exhaust\":%s,\"fan_intake\":%s,\"defogger\":%s,\"grow_light\":%s,\"circulation\":%s},\"connectivity\":{\"wifi\":%s,\"mqtt\":%s,\"ota\":%s,\"lora\":%s},\"storage\":{\"filesystem_ready\":%s},\"commands\":{\"mode\":{\"enabled\":%s,\"requested\":\"%s\",\"status\":\"%s\",\"applied\":\"%s\",\"received_at_ms\":%lu}},\"lora\":{\"session_id\":%lu,\"queue_depth\":%u,\"queue_warning_active\":%s,\"queue_warnings\":%lu,\"max_queue_depth\":%lu,\"last_queue_warning_at_ms\":%lu,\"sent\":%lu,\"acknowledged\":%lu,\"ack_timeouts\":%lu,\"dropped\":%lu,\"last_dropped_sequence\":%lu,\"last_dropped_at_ms\":%lu,\"duplicate_inbound\":%lu,\"invalid_inbound\":%lu,\"last_rssi_dbm\":%d,\"last_snr_db\":%.2f,\"last_error_code\":%d},\"uptime_ms\":%lu}",
              modeLabel(),
              GreenhouseRuntime::controllerStateLabel(controllerState_),
              safeMode_ ? "true" : "false",
@@ -2840,6 +2991,10 @@ class GreenhouseController {
              powerBudget_.allowGrowLight ? "true" : "false",
              powerBudget_.allowCirculation ? "true" : "false",
              manualOverrideActive_ ? "true" : "false",
+             animatedScreenSaverEnabled_ ? "animated" : "blank",
+             displaySleeping_ ? "true" : "false",
+             static_cast<unsigned long>(Settings::OLED.screenSaverTimeoutMs),
+             static_cast<unsigned long>(Settings::OLED.safeModeScreenSaverTimeoutMs),
              effectiveActuators_.topVentOpen ? "true" : "false",
              effectiveActuators_.bottomVentOpen ? "true" : "false",
              effectiveActuators_.exhaustFanOn ? "true" : "false",
@@ -2878,7 +3033,7 @@ class GreenhouseController {
   }
 
   void publishTelemetry(uint32_t now) {
-    char payload[2200];
+    char payload[2440];
     buildTelemetryPayload(payload, sizeof(payload));
 
     if (mqttClient_.connected()) {
@@ -2969,6 +3124,8 @@ class GreenhouseController {
   bool safeMode_ = false;
   bool manualOverrideActive_ = false;
   bool climateOverrideActive_ = false;
+  bool displayOverrideActive_ = false;
+  bool animatedScreenSaverEnabled_ = Settings::OLED.animatedScreenSaverDefault;
   bool bootHealthy_ = false;
   bool rehomeAfterUnsafeReset_ = false;
   CommandAudit lastCommandAudit_{};

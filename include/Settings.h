@@ -36,6 +36,7 @@ struct LoggingConfig {
 };
 
 struct OledConfig {
+  bool animatedScreenSaverDefault;
   uint32_t screenSaverTimeoutMs;
   uint32_t safeModeScreenSaverTimeoutMs;
   uint32_t screenSaverFrameIntervalMs;
@@ -156,6 +157,7 @@ constexpr LoggingConfig LOGGING{
 };
 
 constexpr OledConfig OLED{
+  false,
   60000UL,
   180000UL,
   120UL,

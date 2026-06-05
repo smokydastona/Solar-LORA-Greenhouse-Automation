@@ -62,6 +62,7 @@ The current state topic publishes a retained JSON document shaped like this:
 ```json
 {
   "mode": "AUTO",
+  "controller_state": "AUTO",
   "safe_mode": {
     "active": false,
     "reason": "NONE",
@@ -129,6 +130,22 @@ The current state topic publishes a retained JSON document shaped like this:
       "longest_move_ms": 1200
     }
   },
+  "power_budget": {
+    "servo_moves": true,
+    "vent_fans": true,
+    "defogger": true,
+    "grow_light": true,
+    "circulation": true
+  },
+  "manual_override": {
+    "active": false
+  },
+  "display": {
+    "idle_mode": "blank",
+    "sleeping": false,
+    "normal_timeout_ms": 60000,
+    "safe_mode_timeout_ms": 180000
+  },
   "actuators": {
     "top_open": false,
     "bottom_open": false,
@@ -186,13 +203,23 @@ The current state topic publishes a retained JSON document shaped like this:
 - `AUTO`
 - `OPEN`
 - `CLOSED`
-- `SAFE`
+
+`mode` is the requested operator mode. Safe mode is carried separately under `safe_mode` and the resolved runtime behavior is carried in `controller_state`.
+
+### `controller_state`
+
+- resolved controller state from greenhouse runtime logic
+- reflects the runtime decision layer after safety, battery, and control-mode policy are applied
+- should be treated as the better operator-facing status field when you need to know what the controller is actually doing right now
+- emitted values are currently `AUTO`, `OPEN`, `CLOSED`, `LOW_PWR`, and `SAFE`
 
 ### `safe_mode`
 
 - `active`: whether the controller is suppressing all outputs and holding a conservative state
 - `reason`: `NONE`, `MANUAL`, `BOOT`, `BROWNOUT`, `RECOVERY`, `SENSOR`, or `SERVO`
 - `boot_failures`: consecutive pending-boot count observed by the preferences-backed boot policy
+
+Even when `mode` is still `AUTO`, `OPEN`, or `CLOSED`, `safe_mode.active=true` overrides those requests and forces conservative output handling.
 
 ### `reset_reason`
 
@@ -252,6 +279,21 @@ It is intended as an operator summary, not a formal reliability metric.
 
 These diagnostics are intended for field troubleshooting and commissioning. They are not a substitute for physical inspection when a vent or sensor branch is behaving unsafely.
 
+### `manual_override`
+
+- `active`: whether the local station dashboard is holding a per-output manual mix instead of letting climate logic decide outputs
+- this is independent from inbound MQTT mode control
+- when `active=true`, actuator state should be interpreted as operator-held output state
+
+### `display`
+
+- `idle_mode`: current OLED idle protection mode, either `blank` or `animated`
+- `sleeping`: whether the OLED is presently in its idle protection state
+- `normal_timeout_ms`: idle timeout used during standard operation
+- `safe_mode_timeout_ms`: longer idle timeout used while safe mode is active
+
+These fields let dashboards represent controller-display behavior directly instead of forcing operators to infer whether a dark OLED is asleep, disabled, or faulted.
+
 ### `lora`
 
 - `queue_warning_active`: `true` when the queued frame count is at or above the configured warning threshold
@@ -266,6 +308,8 @@ These diagnostics are intended for field troubleshooting and commissioning. They
 - `servo_moves`: whether the controller is currently allowed to issue new vent servo moves
 - `vent_fans`: whether controller-backed intake and exhaust fans are allowed to run
 - `defogger`, `grow_light`, `circulation`: whether those branches are currently allowed to energize under the active battery policy
+
+These fields are useful for dashboards because they expose battery-policy gating directly instead of forcing the dashboard to infer why a commanded branch is suppressed.
 
 ### `commands.mode`
 
@@ -305,6 +349,17 @@ When discovery is enabled, the firmware currently publishes discovery for:
 The current integration accepts only remote mode changes. It does not accept direct actuator commands.
 
 The new diagnostics fields are currently carried only in the retained JSON state payload and the local CSV logs. They are not yet published as dedicated Home Assistant discovery entities.
+
+## Local dashboard relationship
+
+The built-in HTTP dashboard and local JSON endpoints are not a separate telemetry schema. They read from the same controller state model documented here.
+
+Use this document as the payload authority for:
+
+- MQTT consumers
+- Home Assistant template assumptions
+- local dashboard expectations
+- any future MQTT-to-database or LoRa-to-cloud bridge
 
 ## LoRa on-air contract
 

@@ -7,7 +7,7 @@ See [SAFETY_MODEL.md](./SAFETY_MODEL.md) for the quick reference showing which s
 - Leave the controller in `AUTO` mode for normal operation.
 - Use `OPEN` mode only when you intentionally want emergency venting or hands-on access.
 - Use `CLOSED` mode only for servicing, storm prep, or a specific cold-night hold.
-- The OLED shifts into a dim animated screensaver after about 1 minute of normal idle time, or about 3 minutes while safe mode is active, to reduce burn-in. Wake it with any local mode button or another mode-changing action before treating the display as faulty.
+- The OLED drops into its configured idle protection mode after about 1 minute of normal idle time, or about 3 minutes while safe mode is active, to reduce burn-in. Firmware defaults now blank the screen completely. The local dashboard can switch that idle mode to the dim animated screensaver if you prefer motion over a fully dark panel. Wake the OLED with any local mode button or another mode-changing action before treating the display as faulty.
 - If you change climate thresholds from the station dashboard, make one change at a time and watch at least one control cycle before changing the next threshold.
 
 ## Safe-use rules for non-technical users

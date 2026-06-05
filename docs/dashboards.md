@@ -6,7 +6,7 @@ Current truth:
 
 - Every node can now serve its own local status and Wi-Fi-setup page directly from the ESP32-S3 over HTTP.
 - Home Assistant is a realistic first remote dashboard target today because MQTT discovery is already implemented in firmware.
-- Grafana is only a starter example right now. A real Grafana deployment still needs a time-series storage bridge outside the current firmware repo.
+- Grafana is still a starter example only. A real Grafana deployment still needs a time-series storage bridge outside the current firmware repo.
 
 ## Local Node Dashboard
 
@@ -16,7 +16,7 @@ Current behavior:
 
 - If Wi-Fi credentials are already stored, the node serves its dashboard over the joined network at the IP address shown on serial and OLED.
 - If no Wi-Fi credentials are available or the configured network cannot be joined, the node starts a setup AP and serves the same page at `http://192.168.4.1/`.
-- The page exposes a local status view, a JSON state endpoint at `/api/state`, a nearby-network scan endpoint for SSID selection, a Wi-Fi credential form, clipboard and pasted-text import for copied Wi-Fi share strings or QR payloads, a browser firmware-upload form for `firmware.bin`, and a reset action that clears saved Wi-Fi and reopens setup mode.
+- The page exposes a local status view, a JSON state endpoint at `/api/state`, a nearby-network scan endpoint for SSID selection, Wi-Fi and controller settings forms, clipboard and pasted-text import for copied Wi-Fi share strings or QR payloads, a browser firmware-upload form for `firmware.bin`, and a reset action that clears saved Wi-Fi and reopens setup mode.
 
 Recommended first-node workflow:
 
@@ -39,6 +39,7 @@ The implemented telemetry contract already exposes the following dashboard-relev
 - crop profile and crop status
 - battery raw millivolts, voltage, percentage, and band
 - actuator states
+- OLED idle mode, sleep state, and configured idle timeouts
 - connectivity, LoRa ACK health, and storage readiness
 
 Use [REMOTE_TELEMETRY_CONTRACT.md](./REMOTE_TELEMETRY_CONTRACT.md) as the payload authority.
@@ -60,6 +61,14 @@ Starter artifacts:
 
 That example assumes the firmware is publishing under the default base topic and Home Assistant discovery is enabled.
 
+The starter package now intentionally groups the entities into:
+
+- operator health and power gauges
+- control and safety state including the MQTT mode select entity
+- climate summary and trend history
+- power and LoRa diagnostics
+- actuation state glance cards
+
 ## Grafana
 
 Current truth:
@@ -80,6 +89,20 @@ Use it only after you have a real telemetry pipeline that stores:
 - battery voltage
 - battery percentage
 - health score
+- LoRa queue depth
+- LoRa ACK metrics
+
+The included JSON is a stronger starter layout, but it still assumes you have already normalized greenhouse telemetry into Grafana-queryable metric names such as:
+
+- `mini_greenhouse_air_temperature_c`
+- `mini_greenhouse_humidity_pct`
+- `mini_greenhouse_vpd_kpa`
+- `mini_greenhouse_dew_point_c`
+- `mini_greenhouse_battery_voltage_v`
+- `mini_greenhouse_battery_percentage`
+- `mini_greenhouse_lora_queue_depth`
+- `mini_greenhouse_lora_acknowledged`
+- `mini_greenhouse_lora_ack_timeouts`
 
 ## Recommended Dashboard Layout
 
@@ -125,6 +148,17 @@ Use it only after you have a real telemetry pipeline that stores:
 - LoRa ACK timeout count
 - LoRa ready state
 - filesystem readiness
+
+## Reality check
+
+This repo now includes stronger dashboard artifacts, but it still does not include:
+
+- a broker-to-database bridge
+- Grafana provisioning automation
+- Home Assistant package auto-install logic
+- a central cloud dashboard service
+
+Treat the example files as operator-facing starting points that match the implemented firmware contract, not as a claim that the full remote dashboard stack is shipped in-repo.
 
 ## Compatibility Rule
 

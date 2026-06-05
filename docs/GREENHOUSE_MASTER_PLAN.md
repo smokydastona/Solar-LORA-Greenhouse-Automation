@@ -113,7 +113,7 @@ The first-generation automation system is split into two layers.
 - CSV logging to internal LittleFS is implemented.
 - Separate boot-event logging now records reset reason, boot count, safe-mode state, and failed-boot count.
 - Display and CSV logs now surface sensor availability explicitly so missing probes do not masquerade as valid zero readings.
-- The onboard OLED now falls back to a low-contrast procedural screensaver after about 1 minute of normal idle time, or about 3 minutes in safe mode, instead of holding a static status page indefinitely.
+- The onboard OLED now enters an idle-protection mode after about 1 minute of normal idle time, or about 3 minutes in safe mode, instead of holding a static status page indefinitely. Firmware defaults to a blank screen, and the local dashboard can override that behavior to the low-contrast procedural screensaver when desired.
 - OTA is optional and only available when Wi-Fi credentials are configured and OTA is enabled.
 - Safe-mode boot is now implemented for manual recovery entry and repeated unfinished boots.
 - Brownout-triggered safe mode, unfinished-servo recovery boot handling, and repeated air-sensor-fault escalation are now implemented.
