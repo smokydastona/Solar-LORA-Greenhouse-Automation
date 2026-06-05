@@ -2,69 +2,90 @@
   "title": "Mini Greenhouse Overview",
   "editable": true,
   "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "version": 2,
+  "graphTooltip": 0,
   "panels": [
     {
       "id": 1,
       "type": "stat",
       "title": "Health Score",
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "mini_greenhouse_health_score"
-        }
-      ],
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "refId": "A", "expr": "mini_greenhouse_health_score" }],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto" }
     },
     {
       "id": 2,
-      "type": "timeseries",
-      "title": "Air Temperature",
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "mini_greenhouse_air_temperature_c"
-        }
-      ],
-      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 0 }
+      "type": "stat",
+      "title": "Battery %",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "refId": "A", "expr": "mini_greenhouse_battery_percentage" }],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto" }
     },
     {
       "id": 3,
-      "type": "timeseries",
-      "title": "Humidity",
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "mini_greenhouse_humidity_pct"
-        }
-      ],
-      "gridPos": { "h": 8, "w": 12, "x": 18, "y": 0 }
+      "type": "stat",
+      "title": "LoRa Queue Depth",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [{ "refId": "A", "expr": "mini_greenhouse_lora_queue_depth" }],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto" }
     },
     {
       "id": 4,
-      "type": "timeseries",
-      "title": "VPD",
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "mini_greenhouse_vpd_kpa"
-        }
-      ],
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+      "type": "stat",
+      "title": "ACK Timeouts",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [{ "refId": "A", "expr": "mini_greenhouse_lora_ack_timeouts" }],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto" }
     },
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Battery Voltage",
+      "title": "Air Temperature",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [{ "refId": "A", "expr": "mini_greenhouse_air_temperature_c" }]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Humidity",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [{ "refId": "A", "expr": "mini_greenhouse_humidity_pct" }]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "VPD and Dew Point",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
       "targets": [
-        {
-          "refId": "A",
-          "expr": "mini_greenhouse_battery_voltage_v"
-        }
-      ],
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+        { "refId": "A", "expr": "mini_greenhouse_vpd_kpa" },
+        { "refId": "B", "expr": "mini_greenhouse_dew_point_c" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Battery Voltage",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [{ "refId": "A", "expr": "mini_greenhouse_battery_voltage_v" }]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "LoRa Throughput",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        { "refId": "A", "expr": "mini_greenhouse_lora_acknowledged" },
+        { "refId": "B", "expr": "mini_greenhouse_lora_ack_timeouts" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Queue Pressure",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [{ "refId": "A", "expr": "mini_greenhouse_lora_queue_depth" }]
     }
-  ],
-  "schemaVersion": 39,
-  "version": 1,
-  "refresh": "30s"
+  ]
 }

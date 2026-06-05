@@ -3,26 +3,68 @@ views:
   - title: Greenhouse
     path: greenhouse
     icon: mdi:greenhouse
+    theme: Backend-selected
     cards:
-      - type: entities
-        title: Overview
-        show_header_toggle: false
-        entities:
-          - entity: sensor.mini_greenhouse_health_score
-          - entity: sensor.mini_greenhouse_crop_status
-          - entity: sensor.mini_greenhouse_vpd
-          - entity: sensor.mini_greenhouse_dew_point
-          - entity: binary_sensor.mini_greenhouse_frost_risk
-      - type: entities
-        title: Environment
-        show_header_toggle: false
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: gauge
+            entity: sensor.mini_greenhouse_health_score
+            name: Controller health
+            min: 0
+            max: 100
+            severity:
+              red: 0
+              yellow: 60
+              green: 85
+          - type: gauge
+            entity: sensor.mini_greenhouse_battery_percentage
+            name: Battery reserve
+            min: 0
+            max: 100
+            severity:
+              red: 0
+              yellow: 35
+              green: 65
+          - type: entities
+            title: Control and safety
+            show_header_toggle: false
+            entities:
+              - entity: select.mini_greenhouse_control_mode
+              - entity: binary_sensor.mini_greenhouse_safe_mode_active
+              - entity: binary_sensor.mini_greenhouse_battery_low
+              - entity: binary_sensor.mini_greenhouse_battery_critical
+              - entity: binary_sensor.mini_greenhouse_lora_ready
+          - type: entities
+            title: Climate summary
+            show_header_toggle: false
+            entities:
+              - entity: sensor.mini_greenhouse_air_temperature
+              - entity: sensor.mini_greenhouse_humidity
+              - entity: sensor.mini_greenhouse_vpd
+              - entity: sensor.mini_greenhouse_dew_point
+              - entity: sensor.mini_greenhouse_crop_status
+              - entity: binary_sensor.mini_greenhouse_frost_risk
+      - type: history-graph
+        title: Climate trend
+        hours_to_show: 24
+        refresh_interval: 60
         entities:
           - entity: sensor.mini_greenhouse_air_temperature
           - entity: sensor.mini_greenhouse_humidity
-          - entity: sensor.mini_greenhouse_battery_percentage
+          - entity: sensor.mini_greenhouse_vpd
       - type: entities
-        title: Actuation
+        title: Power and diagnostics
         show_header_toggle: false
+        entities:
+          - entity: sensor.mini_greenhouse_battery_voltage
+          - entity: sensor.mini_greenhouse_lora_queue_depth
+          - entity: sensor.mini_greenhouse_lora_acknowledged
+          - entity: sensor.mini_greenhouse_lora_ack_timeouts
+      - type: glance
+        title: Actuation state
+        show_state: true
         entities:
           - entity: binary_sensor.mini_greenhouse_fan_exhaust
           - entity: binary_sensor.mini_greenhouse_fan_intake

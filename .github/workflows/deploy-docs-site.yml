@@ -61,15 +61,110 @@ jobs:
           links = []
 
           style = """
-          body { font-family: Arial, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #1f2a1f; }
-          nav { margin-bottom: 2rem; padding: 1rem; background: #eef5ea; border-radius: 10px; }
-          nav a { margin-right: 1rem; color: #1f5e2b; text-decoration: none; font-weight: 600; }
-          h1, h2, h3 { color: #214b2b; }
-          code { background: #f4f4f4; padding: 0.1rem 0.3rem; border-radius: 4px; }
-          pre code { display: block; padding: 1rem; overflow-x: auto; }
+          :root {
+            color-scheme: light;
+            --bg: #edf4e8;
+            --paper: rgba(255, 255, 255, 0.9);
+            --panel: #f6fbf2;
+            --text: #213126;
+            --muted: #617163;
+            --accent: #2d6a3a;
+            --accent-soft: #dcead9;
+            --line: #cad7c5;
+            --shadow: 0 18px 42px rgba(25, 44, 28, 0.12);
+          }
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            font-family: Georgia, 'Times New Roman', serif;
+            background: radial-gradient(circle at top, #f8fbf4 0, #edf4e8 42%, #dfe8d8 100%);
+            color: var(--text);
+          }
+          .shell {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 24px 16px 56px;
+          }
+          .masthead {
+            background: linear-gradient(145deg, rgba(31, 55, 36, 0.96), rgba(67, 108, 66, 0.92));
+            color: #f4f8ef;
+            border-radius: 24px;
+            padding: 22px 24px;
+            margin-bottom: 18px;
+            box-shadow: var(--shadow);
+          }
+          .masthead h1 {
+            margin: 0 0 8px;
+            font-size: 2rem;
+            color: #f8fbf4;
+          }
+          .masthead p {
+            margin: 0;
+            max-width: 72ch;
+            line-height: 1.6;
+            color: #dce9d8;
+          }
+          nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 18px;
+            padding: 14px;
+            background: var(--paper);
+            border: 1px solid rgba(202, 215, 197, 0.92);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+          }
+          nav a {
+            text-decoration: none;
+            color: var(--accent);
+            font-weight: 700;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+          }
+          article {
+            background: var(--paper);
+            border: 1px solid rgba(202, 215, 197, 0.92);
+            border-radius: 24px;
+            padding: 28px;
+            box-shadow: var(--shadow);
+            line-height: 1.7;
+          }
+          h1, h2, h3 { color: #21412a; }
+          a { color: var(--accent); }
+          code { background: #edf4e7; padding: 0.1rem 0.35rem; border-radius: 6px; }
+          pre {
+            background: #1f2b22;
+            color: #eef7eb;
+            padding: 1rem;
+            border-radius: 14px;
+            overflow-x: auto;
+          }
+          pre code { background: transparent; padding: 0; color: inherit; }
           table { border-collapse: collapse; width: 100%; }
-          th, td { border: 1px solid #cfd8ce; padding: 0.5rem; text-align: left; }
-          img { max-width: 100%; height: auto; display: block; margin: 1.25rem 0; border: 1px solid #cfd8ce; border-radius: 12px; background: #fff; }
+          th, td { border: 1px solid var(--line); padding: 0.6rem; text-align: left; }
+          th { background: var(--panel); }
+          blockquote {
+            margin: 1.25rem 0;
+            padding: 0.85rem 1rem;
+            border-left: 5px solid #6b8d64;
+            background: #f4f9f0;
+            border-radius: 0 14px 14px 0;
+          }
+          img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 1.25rem 0;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: #fff;
+          }
+          @media (max-width: 700px) {
+            .shell { padding: 16px 12px 36px; }
+            .masthead, article { padding: 18px; }
+          }
           """
 
           def target_name(source: Path) -> str:
@@ -132,7 +227,7 @@ jobs:
               html = markdown.markdown(markdown_source, extensions=['tables', 'fenced_code'])
               output = site / rel_name
               output.write_text(
-                  f'<!doctype html><html><head><meta charset="utf-8"><title>{source.stem}</title><style>{style}</style></head><body>{nav}{html}</body></html>',
+                  f'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{source.stem}</title><style>{style}</style></head><body><div class="shell"><header class="masthead"><h1>Mini Greenhouse Docs</h1><p>Project documentation for the ESP32-S3 greenhouse controller, local dashboard, telemetry contract, wiring, commissioning, and operating guidance.</p></header>{nav}<article>{html}</article></div></body></html>',
                   encoding='utf-8'
               )
           PY
