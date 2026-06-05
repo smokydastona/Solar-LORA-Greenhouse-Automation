@@ -4,6 +4,14 @@ This document is the standard entry point for hardware requirements, build tiers
 
 For the greenhouse-specific BOM, use [MATERIALS_LIST.md](./MATERIALS_LIST.md). For exact wiring, use [WIRING_5V.md](./WIRING_5V.md).
 
+## Enclosure Layout Reference
+
+![Reference-only enclosure layout for the 5 V controller build](./diagrams/greenhouse-controller-enclosure-reference.png)
+
+This image is useful as a packaging reference because it shows the intended physical separation between solar input, power-bank buffering, controller, servo distribution, MOSFET branches, button access, and the shared ground bus inside one enclosure.
+
+Treat it as a concept/layout image only, not as the canonical wiring source. The on-image labels are not authoritative; use [WIRING_5V.md](./WIRING_5V.md), [BUILD_GUIDE_5V.md](./BUILD_GUIDE_5V.md), and [include/PinMap.h](../include/PinMap.h) for the actual pin map and branch definitions.
+
 ## Minimum Supported Hardware
 
 Starter build:

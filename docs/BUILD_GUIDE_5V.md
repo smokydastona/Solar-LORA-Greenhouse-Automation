@@ -4,6 +4,10 @@
 
 This is the build sequence for the complete first-generation controller system implemented in this repository.
 
+Reference-only enclosure layout image: [diagrams/greenhouse-controller-enclosure-reference.png](./diagrams/greenhouse-controller-enclosure-reference.png)
+
+Use that image as a physical layout example for enclosure packing, bus placement, and high-current versus signal-wire separation. Do not use the image as the authoritative wiring source; the written pin map and branch rules below are the source of truth.
+
 ## Hardware paths before you start
 
 ### Current firmware target
@@ -27,6 +31,7 @@ This is the build sequence for the complete first-generation controller system i
 3. Re-secure any loose cover clips, zip ties, or vent hardware.
 4. Pick enclosure and cable routes that stay out of drip paths, runoff, and standing water.
 5. If the four-fan LM2596 branch is being installed at the same time, preset the LM2596 output with a multimeter before connecting the fans.
+6. If you use the enclosure reference image, copy only the physical layout ideas that still match this repo's actual pin map, fuse plan, and branch list.
 
 ## Stage 1: bench build the controller
 

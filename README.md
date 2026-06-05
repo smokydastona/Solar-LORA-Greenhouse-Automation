@@ -48,6 +48,10 @@ Minimum starter build:
 - 5 V solar source and USB power bank
 - common low-voltage wiring, enclosure, and distribution hardware
 
+Reference-only enclosure layout image: [docs/diagrams/greenhouse-controller-enclosure-reference.png](./docs/diagrams/greenhouse-controller-enclosure-reference.png)
+
+Use it as a packaging and cable-separation example only. The authoritative wiring and pin assignments remain in [docs/WIRING_5V.md](./docs/WIRING_5V.md).
+
 Recommended fuller build:
 
 - BME280 for primary air sensing
