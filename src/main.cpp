@@ -1752,10 +1752,13 @@ class GreenhouseController {
   }
 
   void updateDisplaySleep(uint32_t now) {
-    if (!displayReady_ || displaySleeping_ || Settings::OLED.screenSaverTimeoutMs == 0UL) {
+    const uint32_t timeoutMs = safeMode_
+                                   ? Settings::OLED.safeModeScreenSaverTimeoutMs
+                                   : Settings::OLED.screenSaverTimeoutMs;
+    if (!displayReady_ || displaySleeping_ || timeoutMs == 0UL) {
       return;
     }
-    if (now - lastDisplayActivityAt_ < Settings::OLED.screenSaverTimeoutMs) {
+    if (now - lastDisplayActivityAt_ < timeoutMs) {
       return;
     }
 
