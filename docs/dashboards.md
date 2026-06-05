@@ -4,8 +4,27 @@ This document defines the current dashboard posture for the project and provides
 
 Current truth:
 
+- Every node can now serve its own local status and Wi-Fi-setup page directly from the ESP32-S3 over HTTP.
 - Home Assistant is a realistic first remote dashboard target today because MQTT discovery is already implemented in firmware.
 - Grafana is only a starter example right now. A real Grafana deployment still needs a time-series storage bridge outside the current firmware repo.
+
+## Local Node Dashboard
+
+The firmware now exposes a built-in node-local dashboard before any central brain exists.
+
+Current behavior:
+
+- If Wi-Fi credentials are already stored, the node serves its dashboard over the joined network at the IP address shown on serial and OLED.
+- If no Wi-Fi credentials are available or the configured network cannot be joined, the node starts a setup AP and serves the same page at `http://192.168.4.1/`.
+- The page exposes a local status view, a JSON state endpoint at `/api/state`, a nearby-network scan endpoint for SSID selection, a Wi-Fi credential form, clipboard and pasted-text import for copied Wi-Fi share strings or QR payloads, a browser firmware-upload form for `firmware.bin`, and a reset action that clears saved Wi-Fi and reopens setup mode.
+
+Recommended first-node workflow:
+
+1. Flash the firmware.
+2. Join the setup SSID if the board is not yet configured.
+3. Open `http://192.168.4.1/`.
+4. Pick the target SSID from the nearby-network dropdown, then import copied Wi-Fi share text from the commissioning phone or PC or enter only the password manually.
+5. Reopen the node dashboard on the address the board reports after restart.
 
 ## Current Dashboard Surface
 

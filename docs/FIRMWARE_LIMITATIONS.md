@@ -10,7 +10,7 @@ Use this file to prevent over-trusting the controller during deployment planning
 - CSV logging to internal LittleFS is implemented.
 - Separate boot-event logging is implemented in LittleFS.
 - Logged sensor rows now include explicit availability flags for air, water, and light readings.
-- OTA is optional and only available when Wi-Fi credentials are configured and OTA is enabled.
+- Browser-based firmware upload is implemented through the local dashboard, and ArduinoOTA remains optional when it is enabled in settings.
 - Preferences-backed boot reason logging and failed-boot counting are implemented.
 - Safe-mode boot is implemented for repeated failed boots and manual two-button entry at startup.
 - Brownout-triggered safe mode and unfinished-servo recovery boot handling are implemented, and those inspection boots now hold the servos detached instead of re-driving them immediately.
@@ -72,5 +72,5 @@ These are design intentions documented in the repo. They should not be treated a
 ## Deployment boundary
 
 - USB flashing is the guaranteed update path.
-- OTA remains optional convenience, not a required service path.
+- Browser upload and ArduinoOTA remain optional convenience, not a required service path.
 - Before unattended long-duration deployment, final battery calibration, LoRa peer commissioning, jam handling, and hardware-in-the-loop validation should still be treated as open engineering work.

@@ -136,7 +136,10 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 - Manual override buttons for `AUTO`, `FORCE OPEN`, and `FORCE CLOSED` use cases
 - OLED status display for climate values and actuator states
 - CSV logging to LittleFS
-- Optional Wi-Fi and OTA update support when Wi-Fi credentials are configured
+- Built-in local web dashboard with a setup portal for first-time Wi-Fi onboarding, nearby-network SSID scanning, clipboard and QR-text Wi-Fi import, and future node reuse
+- Browser-based Wi-Fi firmware upload using the OTA partition layout, so installed nodes can be updated in place from the dashboard
+- Firmware versions now auto-derive from git history during each build instead of relying on manual version edits
+- Optional Wi-Fi and OTA update support when Wi-Fi credentials are configured or saved through the local portal
 - Boot-time firmware version banner on serial and OLED so field updates can be verified without guessing the flashed image
 - Preferences-backed boot reason logging and boot-failure tracking
 - Safe-mode boot after repeated failed boots or by holding both override buttons during startup
@@ -153,10 +156,12 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 ## Quick Start
 
 1. Install VS Code with PlatformIO or use an environment that can build PlatformIO projects.
-2. Update the Wi-Fi credentials and any threshold values in [include/Settings.h](./include/Settings.h) if you want network time and OTA.
+2. Either preseed Wi-Fi in [include/Settings.h](./include/Settings.h) or leave it blank and use the node's built-in setup portal on first boot.
 3. Wire the hardware according to [docs/WIRING_5V.md](./docs/WIRING_5V.md), choosing either the current owned-hardware DHT22 plus SG90 path or the fuller BME280 plus BH1750 plus DS18B20 upgrade path.
 4. Flash the firmware to the ESP32-S3 board.
-5. Commission the system using the checklist in [docs/BUILD_GUIDE_5V.md](./docs/BUILD_GUIDE_5V.md).
+5. If the node starts in setup mode, join the broadcast setup SSID, open `http://192.168.4.1/`, choose a nearby SSID from the scan dropdown, and then either paste or import copied Wi-Fi share text from your phone or PC or enter only the password manually.
+6. After the node is installed on stable Wi-Fi, use the dashboard firmware-upload form with the built `firmware.bin` whenever you want an in-place update.
+6. Commission the system using the checklist in [docs/BUILD_GUIDE_5V.md](./docs/BUILD_GUIDE_5V.md).
 
 ## Logic Test Harness
 

@@ -16,9 +16,9 @@ Examples:
 - `0.2.0`
 - `1.0.0`
 
-The firmware version string that ships on the controller is defined in [../include/Version.h](../include/Version.h). Update that header in the same change set as any release-note or release-tag change.
+The firmware release series and codename live in [../include/Version.h](../include/Version.h). The shipped firmware version now auto-derives its patch number from git history during each build through [../scripts/versioning.py](../scripts/versioning.py).
 
-On pushes to `main`, CI now uses that same header as the source of truth for release tags and GitHub releases. If `include/Version.h` says `0.1.1`, the release workflow targets `v0.1.1` and skips creating a duplicate if that tag already exists.
+On pushes to `main`, CI now resolves the same automatic build version and uses it for release tags and GitHub releases. If the current series is `0.1` and git history resolves to patch `39`, the release workflow targets `v0.1.39` and skips creating a duplicate if that tag already exists.
 
 ## Pre-1.0 Rule
 
@@ -34,7 +34,11 @@ That means:
 
 ### Patch release
 
-Use a patch release for:
+The patch component is now automatic. Bumping the release cadence means changing the `MAJOR.MINOR` series in [../include/Version.h](../include/Version.h); the next build then picks up the new series and resumes counting patches from git history.
+
+### Patch release
+
+Use a patch release series for:
 
 - documentation fixes that do not change required operator behavior
 - bug fixes that do not change the intended public control or telemetry contract substantially
@@ -79,7 +83,7 @@ When release tags are used, prefer tags that match the version exactly:
 - `v0.1.0`
 - `v0.2.0`
 
-The running firmware should surface the same version on the serial boot banner and OLED boot screen so field verification matches the git tag and changelog entry.
+The running firmware should surface the same auto-derived version on the serial boot banner, OLED boot screen, and local dashboard so field verification matches the git tag and changelog entry.
 
 ## Reality Rule
 

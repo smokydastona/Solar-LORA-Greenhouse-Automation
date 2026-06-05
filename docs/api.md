@@ -2,7 +2,7 @@
 
 This document is the standard entry point for machine-consumable integrations.
 
-The current implemented integration surface is MQTT over Wi-Fi with Home Assistant discovery plus raw point-to-point SX1262 LoRa telemetry. For the full canonical payload contract, use [REMOTE_TELEMETRY_CONTRACT.md](./REMOTE_TELEMETRY_CONTRACT.md).
+The current implemented integration surface is MQTT over Wi-Fi with Home Assistant discovery, a node-local HTTP dashboard, and raw point-to-point SX1262 LoRa telemetry. For the full canonical payload contract, use [REMOTE_TELEMETRY_CONTRACT.md](./REMOTE_TELEMETRY_CONTRACT.md).
 
 ## Implemented Today
 
@@ -13,6 +13,20 @@ The current implemented integration surface is MQTT over Wi-Fi with Home Assista
 - Home Assistant MQTT discovery payloads
 - safe inbound MQTT mode control accepting only `AUTO`, `OPEN`, and `CLOSED`
 - structured JSON state including climate, battery, health, diagnostics, actuator, and connectivity fields
+- local HTTP dashboard and setup page
+- nearby Wi-Fi scan JSON endpoint at `/api/wifi/scan`
+- local firmware upload endpoint at `/update`
+
+## Local HTTP Surface
+
+The node-local HTTP interface currently exposes:
+
+- `/`: dashboard, Wi-Fi onboarding form, and firmware upload form
+- `/api/state`: live JSON state snapshot
+- `/api/wifi/scan`: nearby SSID scan results for the onboarding dropdown
+- `/wifi`: save Wi-Fi credentials and restart
+- `/wifi/reset`: clear saved Wi-Fi and restart into setup mode
+- `/update`: upload a `firmware.bin` over Wi-Fi and reboot into the new image
 
 ## Current Topic Model
 
@@ -62,7 +76,7 @@ Not yet implemented as first-class repo surfaces:
 
 ## Compatibility Rule
 
-If the payload shape or topic structure changes, [REMOTE_TELEMETRY_CONTRACT.md](./REMOTE_TELEMETRY_CONTRACT.md) should change in the same commit.
+If the payload shape, topic structure, or local HTTP surface changes, this document and any affected dashboard docs should change in the same commit.
 
 ## Read Next
 

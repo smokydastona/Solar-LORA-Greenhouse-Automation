@@ -15,6 +15,9 @@ This file starts with the first explicitly documented public baseline for the re
 - Runtime HAL modules for battery sensing, display setup, and sensor sampling under `include/runtime/` and `src/runtime/`.
 - A new SVG system block diagram for the docs set and GitHub Pages site.
 - CI-driven versioned release creation that derives Git tags from `include/Version.h` on pushes to `main`.
+- Nearby Wi-Fi scanning in the local setup portal so users can pick the SSID locally and only enter or import the password.
+- Browser-based firmware upload from the node dashboard using the ESP32-S3 OTA partition layout.
+- Automatic firmware patch versioning from git history during each build and release.
 
 ### Planned
 

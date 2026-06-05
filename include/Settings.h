@@ -13,6 +13,8 @@ struct WifiConfig {
   const char *hostname;
   const char *tzInfo;
   bool enableOta;
+  bool enableSetupPortal;
+  uint32_t connectTimeoutMs;
 };
 
 using ClimateConfig = GreenhouseLogic::ClimateConfig;
@@ -116,11 +118,13 @@ struct SystemConfig {
 };
 
 constexpr WifiConfig WIFI{
-    "",  // Leave empty to run in offline mode.
+  "",  // Leave empty to boot into the setup portal until Wi-Fi is saved from the node web UI.
     "",
     "mini-greenhouse",
-  "PST8PDT,M3.2.0/2,M11.1.0/2",
+    "PST8PDT,M3.2.0/2,M11.1.0/2",
     false,
+    true,
+    15000UL,
 };
 
 constexpr ClimateConfig CLIMATE = GreenhouseDefaults::CLIMATE;

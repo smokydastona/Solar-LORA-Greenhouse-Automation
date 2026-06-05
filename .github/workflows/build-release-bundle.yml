@@ -74,6 +74,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -85,6 +87,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install platformio esptool
+
+      - name: Resolve automatic firmware version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(python scripts/versioning.py --field version)
+          LABEL=$(python scripts/versioning.py --field label)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "label=$LABEL" >> "$GITHUB_OUTPUT"
 
       - name: Build greenhouse controller firmware
         shell: bash
@@ -100,6 +112,8 @@ jobs:
 
           cp README.md "$OUT_DIR/"
           cp platformio.ini "$OUT_DIR/"
+          printf '%s\n' '${{ steps.version.outputs.version }}' > "$OUT_DIR/VERSION.txt"
+          printf '%s\n' '${{ steps.version.outputs.label }}' > "$OUT_DIR/BUILD_LABEL.txt"
           cp "$BUILD_DIR/firmware.bin" "$OUT_DIR/"
 
           if [ -f "$BUILD_DIR/bootloader.bin" ]; then
@@ -217,19 +231,21 @@ jobs:
           name: greenhouse-release-bundle-${{ github.run_number }}
           path: release-bundle
 
-      - name: Resolve version tag from Version.h
+      - name: Resolve automatic version tag
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          VERSION=$(sed -n 's/^constexpr const char \*kFirmwareVersion = "\([^"]*\)";$/\1/p' include/Version.h | head -n 1)
+          VERSION=$(python scripts/versioning.py --field version)
+          LABEL=$(python scripts/versioning.py --field label)
           if [ -z "$VERSION" ]; then
-            echo "::error::Unable to parse firmware version from include/Version.h"
+            echo "::error::Unable to resolve firmware version from scripts/versioning.py"
             exit 1
           fi
 
           TAG="v$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "label=$LABEL" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
           git fetch --tags --force
@@ -247,14 +263,16 @@ jobs:
           Automated release for Mini Greenhouse firmware ${{ steps.version.outputs.version }}.
 
           Source of truth:
-          - include/Version.h -> ${{ steps.version.outputs.tag }}
+          - include/Version.h -> series and codename
+          - scripts/versioning.py -> automatic patch number and build label
+          - build label -> ${{ steps.version.outputs.label }}
 
           Assets:
           - ESP32-S3 firmware binaries
           - merged flash image when available
           - documentation snapshot bundle
 
-          Update the version in include/Version.h and the matching changelog/docs entries in the same change set before merging future releases.
+          Update the release series in include/Version.h and the matching changelog/docs entries in the same change set before merging future releases.
           EOF
 
       - name: Create GitHub release

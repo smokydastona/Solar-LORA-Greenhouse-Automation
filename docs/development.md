@@ -40,7 +40,7 @@ Already present:
 - unit-style host tests for core logic
 - CI workflows
 - release-bundle workflow
-- OTA support when Wi-Fi is configured
+- browser-based Wi-Fi firmware upload plus optional ArduinoOTA support when Wi-Fi is configured
 - watchdog and safe-mode behavior in firmware
 
 Still missing or incomplete:
@@ -49,7 +49,7 @@ Still missing or incomplete:
 - integration tests beyond the pure logic layer
 - rollback firmware path
 - Docker development environment
-- richer release workflow and release automation beyond the new changelog discipline
+- rollback-aware release validation beyond the current browser upload and release bundle flow
 - hardware revision notes and explicit board-revision tracking
 
 ## Versioning And Release Notes

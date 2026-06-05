@@ -97,7 +97,7 @@ The current host-side test environment also requires a working native C/C++ tool
 ## CI surfaces
 
 - [../.github/workflows/build-release-bundle.yml](../.github/workflows/build-release-bundle.yml) builds firmware, bundles docs, and can publish a release bundle.
-- The release workflow now derives the Git tag directly from [../include/Version.h](../include/Version.h) on pushes to `main` and skips release creation when that tag already exists.
+- The release workflow now derives the Git tag from the build series in [../include/Version.h](../include/Version.h) plus [../scripts/versioning.py](../scripts/versioning.py), and it needs full git history to keep the automatic patch number stable.
 - [../.github/workflows/deploy-docs-site.yml](../.github/workflows/deploy-docs-site.yml) renders the markdown docs site for GitHub Pages.
 
 ## Good next engineering targets

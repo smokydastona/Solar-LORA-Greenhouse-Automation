@@ -20,7 +20,7 @@ It is not a duplicate of [FIRMWARE_LIMITATIONS.md](./FIRMWARE_LIMITATIONS.md). T
 
 ### OTA is convenience-only, not a field-proof update path
 
-- OTA exists when Wi-Fi is configured.
+- Browser-based firmware upload and optional ArduinoOTA exist when the node is reachable over Wi-Fi.
 - USB flashing remains the guaranteed recovery and service path.
 - A rollback-capable OTA strategy is not yet claimed.
 
