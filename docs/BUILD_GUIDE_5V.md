@@ -39,6 +39,7 @@ This is the build sequence for the complete first-generation controller system i
 7. After restart, verify the node dashboard is reachable on the address shown by the board. In station mode the page now switches from setup-only onboarding into a live dashboard with current telemetry, mode buttons, and per-output manual override controls.
 8. Verify the browser-based firmware upload page using a known-good `firmware.bin` if you want in-place updates after installation. If you browse from a phone or laptop running a VPN, the node firmware will still answer on the LAN, but some VPN clients block local subnet access on the client side.
 9. If LoRa transport is enabled in [../include/Settings.h](../include/Settings.h), confirm the configured radio frequency matches your legal regional band before first on-air transmission.
+10. If you plan to tune thresholds from the station dashboard, test one save and one restore-default cycle while the board is still on the bench. Saving climate settings now requires the current station Wi-Fi password, or the setup-password fallback if the station network is open.
 
 ## Stage 2: wire the sensor bus
 

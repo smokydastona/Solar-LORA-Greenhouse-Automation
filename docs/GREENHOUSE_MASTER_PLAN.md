@@ -121,6 +121,7 @@ The first-generation automation system is split into two layers.
 - Sensor data is now bounded by freshness windows so the controller stops trusting stale readings after the configured age limit.
 - VPD, dew point, frost-risk, and crop-profile interpretation are now implemented.
 - Optional MQTT publishing and Home Assistant discovery are now implemented for remote telemetry consumers.
+- The station dashboard can now persist a climate-threshold override profile on the node itself, authenticated by the current station Wi-Fi password or the setup-password fallback on open networks.
 - Battery-voltage awareness is implemented against the Heltec board's onboard `VBAT_Read` and `ADC_Ctrl` path and still requires on-device calibration confirmation before the reading should be trusted operationally.
 - Low battery now sheds nonessential controller-backed loads first, and critical battery suppresses controller-backed switched loads and new servo moves to protect the controller path.
 - Startup now validates the configured thresholds, timings, servo angles, freshness windows, and LoRa retry policy and enters config-fault safe mode if that contract is broken.

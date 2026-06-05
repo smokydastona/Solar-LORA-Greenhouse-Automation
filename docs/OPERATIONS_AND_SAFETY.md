@@ -7,6 +7,7 @@ See [SAFETY_MODEL.md](./SAFETY_MODEL.md) for the quick reference showing which s
 - Leave the controller in `AUTO` mode for normal operation.
 - Use `OPEN` mode only when you intentionally want emergency venting or hands-on access.
 - Use `CLOSED` mode only for servicing, storm prep, or a specific cold-night hold.
+- If you change climate thresholds from the station dashboard, make one change at a time and watch at least one control cycle before changing the next threshold.
 
 ## Safe-use rules for non-technical users
 
@@ -120,6 +121,7 @@ See [SAFETY_MODEL.md](./SAFETY_MODEL.md) for the quick reference showing which s
 - If using the fuller sensor stack, verify the DS18B20 pull-up resistor.
 - If telemetry shows a sensor `age_ms` value climbing past the configured freshness window, treat that reading as stale even if the last numeric value looked plausible.
 - If using the fuller sensor stack, check I2C wiring for the BME280 and BH1750.
+- If the greenhouse starts responding at the wrong temperatures after a dashboard edit, restore the firmware-default climate thresholds from the station dashboard before changing hardware or rewiring anything.
 
 ### Fans never turn on in auto mode
 
@@ -130,4 +132,4 @@ See [SAFETY_MODEL.md](./SAFETY_MODEL.md) for the quick reference showing which s
 ### Grow light runs at the wrong times
 
 - Verify Wi-Fi and NTP if using scheduled supplemental lighting.
-- Verify the light threshold and local time zone in [include/Settings.h](../include/Settings.h).
+- Verify the active grow-light lux threshold in the station dashboard, then verify the local time zone in [include/Settings.h](../include/Settings.h).

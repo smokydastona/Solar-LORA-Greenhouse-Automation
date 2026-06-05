@@ -16,6 +16,7 @@ The current implemented integration surface is MQTT over Wi-Fi with Home Assista
 - local HTTP dashboard and setup page with station-mode live controls
 - nearby Wi-Fi scan JSON endpoint at `/api/wifi/scan`
 - local control endpoints for live mode changes, manual override, and per-output commands
+- local climate-settings endpoints for authenticated threshold editing from the station dashboard
 - local firmware upload endpoint at `/update`
 
 ## Local HTTP Surface
@@ -28,6 +29,8 @@ The node-local HTTP interface currently exposes:
 - `/api/control/mode`: update controller mode with `AUTO`, `OPEN`, `CLOSED`, or `MANUAL`
 - `/api/control/manual`: enable or release manual output override
 - `/api/control/actuator`: set individual outputs while manual override is active
+- `/api/settings/climate`: read or save the active climate threshold profile
+- `/api/settings/climate/reset`: restore firmware-default climate thresholds
 - `/api/wifi/scan`: nearby SSID scan results for the onboarding dropdown
 - `/wifi`: save Wi-Fi credentials and restart
 - `/wifi/reset`: clear saved Wi-Fi and restart into setup mode
@@ -54,6 +57,7 @@ The published state includes:
 - crop profile and crop status
 - air, water, and light sensor availability and readings
 - greenhouse metrics such as VPD and dew point
+- active climate-threshold profile and whether a dashboard override is active through the climate-settings endpoint
 - battery status
 - controller health score
 - recent persisted diagnostic event, per-sensor error counters, and servo timing diagnostics
@@ -80,6 +84,8 @@ Not yet implemented as first-class repo surfaces:
 - webhooks
 
 The HTTP control surface is intentionally node-local and unauthenticated. It is meant for the greenhouse owner on the same LAN, not for internet exposure.
+
+Climate threshold editing is narrower: the station dashboard requires the current station Wi-Fi password, or the node setup password if the station network is open, before it will save threshold changes.
 
 ## VPN Boundary
 

@@ -39,6 +39,7 @@
 namespace {
 
 using GreenhouseLogic::ActuatorState;
+using GreenhouseLogic::ClimateConfig;
 using GreenhouseLogic::ControlMode;
 using GreenhouseLogic::CropProfile;
 using GreenhouseLogic::CropStatus;
@@ -441,6 +442,7 @@ class GreenhouseController {
   void initPreferences() {
     preferences_.begin("greenhouse", false);
     mode_ = static_cast<ControlMode>(preferences_.getUChar("mode", static_cast<uint8_t>(ControlMode::automatic)));
+    loadClimateConfig();
 
     bootCount_ = preferences_.getUInt("boot_count", 0U) + 1U;
     preferences_.putUInt("boot_count", bootCount_);
@@ -494,6 +496,70 @@ class GreenhouseController {
       copySettingString(wifiConfig_.hostname, sizeof(wifiConfig_.hostname), "mini-greenhouse");
     }
     wifiConfig_.hasCredentials = strlen(wifiConfig_.ssid) > 0;
+  }
+
+  void loadClimateConfig() {
+    runtimeClimate_ = Settings::CLIMATE;
+    climateOverrideActive_ = preferences_.getBool("cl_override", false);
+    if (!climateOverrideActive_) {
+      return;
+    }
+
+    ClimateConfig candidate = runtimeClimate_;
+    candidate.ventOpenTempC = preferences_.getFloat("cl_v_open", candidate.ventOpenTempC);
+    candidate.ventCloseTempC = preferences_.getFloat("cl_v_close", candidate.ventCloseTempC);
+    candidate.fanOnTempC = preferences_.getFloat("cl_fan_on", candidate.fanOnTempC);
+    candidate.fanOffTempC = preferences_.getFloat("cl_fan_off", candidate.fanOffTempC);
+    candidate.humidityFanOnPct = preferences_.getFloat("cl_hum_on", candidate.humidityFanOnPct);
+    candidate.humidityFanOffPct = preferences_.getFloat("cl_hum_off", candidate.humidityFanOffPct);
+    candidate.heaterOnTempC = preferences_.getFloat("cl_heat_on", candidate.heaterOnTempC);
+    candidate.heaterOffTempC = preferences_.getFloat("cl_heat_off", candidate.heaterOffTempC);
+    candidate.waterHighTempC = preferences_.getFloat("cl_water_hi", candidate.waterHighTempC);
+    candidate.waterLowTempC = preferences_.getFloat("cl_water_lo", candidate.waterLowTempC);
+    candidate.growLightLuxThreshold = preferences_.getFloat("cl_light_lux", candidate.growLightLuxThreshold);
+
+    ConfigFault fault = ConfigFault::none;
+    if (!validateClimateConfig(candidate, fault)) {
+      clearClimateConfigOverride();
+      Serial.printf("Invalid stored climate override ignored: %s\n", configFaultLabel(fault));
+      return;
+    }
+
+    runtimeClimate_ = candidate;
+  }
+
+  void saveClimateConfig(const ClimateConfig &climate) {
+    preferences_.putBool("cl_override", true);
+    preferences_.putFloat("cl_v_open", climate.ventOpenTempC);
+    preferences_.putFloat("cl_v_close", climate.ventCloseTempC);
+    preferences_.putFloat("cl_fan_on", climate.fanOnTempC);
+    preferences_.putFloat("cl_fan_off", climate.fanOffTempC);
+    preferences_.putFloat("cl_hum_on", climate.humidityFanOnPct);
+    preferences_.putFloat("cl_hum_off", climate.humidityFanOffPct);
+    preferences_.putFloat("cl_heat_on", climate.heaterOnTempC);
+    preferences_.putFloat("cl_heat_off", climate.heaterOffTempC);
+    preferences_.putFloat("cl_water_hi", climate.waterHighTempC);
+    preferences_.putFloat("cl_water_lo", climate.waterLowTempC);
+    preferences_.putFloat("cl_light_lux", climate.growLightLuxThreshold);
+    runtimeClimate_ = climate;
+    climateOverrideActive_ = true;
+  }
+
+  void clearClimateConfigOverride() {
+    preferences_.remove("cl_override");
+    preferences_.remove("cl_v_open");
+    preferences_.remove("cl_v_close");
+    preferences_.remove("cl_fan_on");
+    preferences_.remove("cl_fan_off");
+    preferences_.remove("cl_hum_on");
+    preferences_.remove("cl_hum_off");
+    preferences_.remove("cl_heat_on");
+    preferences_.remove("cl_heat_off");
+    preferences_.remove("cl_water_hi");
+    preferences_.remove("cl_water_lo");
+    preferences_.remove("cl_light_lux");
+    runtimeClimate_ = Settings::CLIMATE;
+    climateOverrideActive_ = false;
   }
 
   void initReliability() {
@@ -719,6 +785,9 @@ class GreenhouseController {
     webServer_.on("/api/control/mode", HTTP_POST, [this]() { handleModeControlRequest(); });
     webServer_.on("/api/control/manual", HTTP_POST, [this]() { handleManualOverrideRequest(); });
     webServer_.on("/api/control/actuator", HTTP_POST, [this]() { handleActuatorControlRequest(); });
+    webServer_.on("/api/settings/climate", HTTP_GET, [this]() { handleClimateSettingsRequest(); });
+    webServer_.on("/api/settings/climate", HTTP_POST, [this]() { handleClimateSettingsSaveRequest(); });
+    webServer_.on("/api/settings/climate/reset", HTTP_POST, [this]() { handleClimateSettingsResetRequest(); });
     webServer_.on("/api/wifi/scan", HTTP_GET, [this]() { handleWifiScanRequest(); });
     webServer_.on("/wifi", HTTP_POST, [this]() { handleWifiSaveRequest(); });
     webServer_.on("/wifi/reset", HTTP_POST, [this]() { handleWifiResetRequest(); });
@@ -756,6 +825,52 @@ class GreenhouseController {
     buildControlApiPayload(payload, true, "");
     webServer_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     webServer_.send(200, "application/json; charset=utf-8", payload);
+  }
+
+  void handleClimateSettingsRequest() {
+    String payload;
+    buildClimateSettingsPayload(payload, true, "");
+    webServer_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    webServer_.send(200, "application/json; charset=utf-8", payload);
+  }
+
+  void handleClimateSettingsSaveRequest() {
+    String authError;
+    if (!authorizeClimateSettingsEdit(authError)) {
+      sendClimateSettingsResponse(403, false, authError.c_str());
+      return;
+    }
+
+    ClimateConfig candidate = runtimeClimate_;
+    if (!parseClimateSettingsFromRequest(candidate, authError)) {
+      sendClimateSettingsResponse(400, false, authError.c_str());
+      return;
+    }
+
+    ConfigFault fault = ConfigFault::none;
+    if (!validateClimateConfig(candidate, fault)) {
+      authError = String("Rejected climate settings: ") + configFaultLabel(fault) + '.';
+      sendClimateSettingsResponse(400, false, authError.c_str());
+      return;
+    }
+
+    saveClimateConfig(candidate);
+    applyConfigurationSafety();
+    refreshControlOutputs();
+    sendClimateSettingsResponse(200, true, "Climate thresholds saved.");
+  }
+
+  void handleClimateSettingsResetRequest() {
+    String authError;
+    if (!authorizeClimateSettingsEdit(authError)) {
+      sendClimateSettingsResponse(403, false, authError.c_str());
+      return;
+    }
+
+    clearClimateConfigOverride();
+    applyConfigurationSafety();
+    refreshControlOutputs();
+    sendClimateSettingsResponse(200, true, "Climate thresholds restored to firmware defaults.");
   }
 
   void handleModeControlRequest() {
@@ -895,6 +1010,139 @@ class GreenhouseController {
     computeOutputs();
     applyActuatorState();
     renderDisplay(true);
+  }
+
+  bool authorizeClimateSettingsEdit(String &message) {
+    if (WiFi.status() != WL_CONNECTED) {
+      message = "Climate settings can only be edited from the station dashboard after the node joins Wi-Fi.";
+      return false;
+    }
+
+    const String password = webServer_.arg("password");
+    if (password.length() == 0) {
+      message = "Enter the station Wi-Fi password to save climate settings.";
+      return false;
+    }
+
+    const bool matchesStationPassword = strlen(wifiConfig_.password) > 0 && password == wifiConfig_.password;
+    const bool matchesSetupPassword = strlen(setupApPassword_) > 0 && password == setupApPassword_;
+    if (!matchesStationPassword && !matchesSetupPassword) {
+      message = "Authentication failed. Use the station Wi-Fi password or the node setup password.";
+      return false;
+    }
+
+    return true;
+  }
+
+  bool parseClimateSettingsFromRequest(ClimateConfig &climate, String &message) {
+    return parseFloatArg("vent_open_temp_c", climate.ventOpenTempC, message) &&
+           parseFloatArg("vent_close_temp_c", climate.ventCloseTempC, message) &&
+           parseFloatArg("fan_on_temp_c", climate.fanOnTempC, message) &&
+           parseFloatArg("fan_off_temp_c", climate.fanOffTempC, message) &&
+           parseFloatArg("humidity_fan_on_pct", climate.humidityFanOnPct, message) &&
+           parseFloatArg("humidity_fan_off_pct", climate.humidityFanOffPct, message) &&
+           parseFloatArg("heater_on_temp_c", climate.heaterOnTempC, message) &&
+           parseFloatArg("heater_off_temp_c", climate.heaterOffTempC, message) &&
+           parseFloatArg("water_high_temp_c", climate.waterHighTempC, message) &&
+           parseFloatArg("water_low_temp_c", climate.waterLowTempC, message) &&
+           parseFloatArg("grow_light_lux_threshold", climate.growLightLuxThreshold, message);
+  }
+
+  bool parseFloatArg(const char *name, float &value, String &message) {
+    const String rawValue = webServer_.arg(name);
+    String trimmed = rawValue;
+    trimmed.trim();
+    if (trimmed.length() == 0) {
+      message = String("Missing setting: ") + name + '.';
+      return false;
+    }
+
+    char buffer[32]{};
+    trimmed.toCharArray(buffer, sizeof(buffer));
+    char *end = nullptr;
+    const float parsed = strtof(buffer, &end);
+    if (end == buffer || *end != '\0' || isnan(parsed) || isinf(parsed)) {
+      message = String("Invalid numeric value for ") + name + '.';
+      return false;
+    }
+
+    value = parsed;
+    return true;
+  }
+
+  bool validateClimateConfig(const ClimateConfig &climate, ConfigFault &fault) const {
+    GreenhouseRuntime::ValidationInput input{};
+    populateValidationInput(input, climate);
+    fault = GreenhouseRuntime::validateConfiguration(input);
+    return fault == ConfigFault::none;
+  }
+
+  void populateValidationInput(GreenhouseRuntime::ValidationInput &input, const ClimateConfig &climate) const {
+    input.climate = climate;
+    input.freshness.airMaxAgeMs = Settings::RELIABILITY.airDataMaxAgeMs;
+    input.freshness.waterMaxAgeMs = Settings::RELIABILITY.waterDataMaxAgeMs;
+    input.freshness.lightMaxAgeMs = Settings::RELIABILITY.lightDataMaxAgeMs;
+    input.sampleIntervalMs = Settings::LOGGING.sampleIntervalMs;
+    input.displayIntervalMs = Settings::LOGGING.displayIntervalMs;
+    input.controlIntervalMs = Settings::LOGGING.controlIntervalMs;
+    input.otaPollIntervalMs = Settings::LOGGING.otaPollIntervalMs;
+    input.mqttPublishIntervalMs = Settings::MQTT.publishIntervalMs;
+    input.loraMaxRetries = Settings::LORA.maxRetries;
+    input.loraRetryBackoffMs = Settings::LORA.retryBackoffMs;
+    input.batteryLowVoltage = Settings::BATTERY.lowVoltage;
+    input.batteryCriticalVoltage = Settings::BATTERY.criticalVoltage;
+    input.batteryFullVoltage = Settings::BATTERY.fullVoltage;
+    input.batteryEmptyVoltage = Settings::BATTERY.emptyVoltage;
+    input.topClosedDegrees = Settings::SERVOS.topClosedDegrees;
+    input.topOpenDegrees = Settings::SERVOS.topOpenDegrees;
+    input.bottomClosedDegrees = Settings::SERVOS.bottomClosedDegrees;
+    input.bottomOpenDegrees = Settings::SERVOS.bottomOpenDegrees;
+  }
+
+  void buildClimateSettingsPayload(String &payload, bool ok, const char *message) const {
+    payload.remove(0);
+    payload.reserve(640);
+    payload += F("{\"ok\":");
+    payload += ok ? F("true") : F("false");
+    payload += F(",\"message\":\"");
+    payload += jsonEscape(message == nullptr ? "" : message);
+    payload += F("\",\"override_active\":");
+    payload += climateOverrideActive_ ? F("true") : F("false");
+    payload += F(",\"settings_auth\":\"station_or_setup_password\",\"climate\":{");
+    payload += F("\"vent_open_temp_c\":");
+    payload += String(runtimeClimate_.ventOpenTempC, 2);
+    payload += F(",\"vent_close_temp_c\":");
+    payload += String(runtimeClimate_.ventCloseTempC, 2);
+    payload += F(",\"fan_on_temp_c\":");
+    payload += String(runtimeClimate_.fanOnTempC, 2);
+    payload += F(",\"fan_off_temp_c\":");
+    payload += String(runtimeClimate_.fanOffTempC, 2);
+    payload += F(",\"humidity_fan_on_pct\":");
+    payload += String(runtimeClimate_.humidityFanOnPct, 2);
+    payload += F(",\"humidity_fan_off_pct\":");
+    payload += String(runtimeClimate_.humidityFanOffPct, 2);
+    payload += F(",\"heater_on_temp_c\":");
+    payload += String(runtimeClimate_.heaterOnTempC, 2);
+    payload += F(",\"heater_off_temp_c\":");
+    payload += String(runtimeClimate_.heaterOffTempC, 2);
+    payload += F(",\"water_high_temp_c\":");
+    payload += String(runtimeClimate_.waterHighTempC, 2);
+    payload += F(",\"water_low_temp_c\":");
+    payload += String(runtimeClimate_.waterLowTempC, 2);
+    payload += F(",\"grow_light_start_minutes\":");
+    payload += String(runtimeClimate_.growLightStartMinutes);
+    payload += F(",\"grow_light_stop_minutes\":");
+    payload += String(runtimeClimate_.growLightStopMinutes);
+    payload += F(",\"grow_light_lux_threshold\":");
+    payload += String(runtimeClimate_.growLightLuxThreshold, 2);
+    payload += F("}}");
+  }
+
+  void sendClimateSettingsResponse(int statusCode, bool ok, const char *message) {
+    String payload;
+    buildClimateSettingsPayload(payload, ok, message);
+    webServer_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    webServer_.send(statusCode, "application/json; charset=utf-8", payload);
   }
 
   void buildControlApiPayload(String &payload, bool ok, const char *message) const {
@@ -1282,12 +1530,29 @@ class GreenhouseController {
       html += F("</div>");
       html += F("<div class='grid'>");
       html += String("<div class='card'><strong>Crop Profile</strong><br>") + htmlEscape(GreenhouseLogic::cropProfile(Settings::CROP.profile).name) + "</div>";
-      html += String("<div class='card'><strong>Vent Window</strong><br>") + String(Settings::CLIMATE.ventCloseTempC, 1) + "C to " + String(Settings::CLIMATE.ventOpenTempC, 1) + "C</div>";
-      html += String("<div class='card'><strong>Humidity Fan</strong><br>") + String(Settings::CLIMATE.humidityFanOffPct, 0) + "% to " + String(Settings::CLIMATE.humidityFanOnPct, 0) + "%</div>";
-      html += String("<div class='card'><strong>Defogger Window</strong><br>") + String(Settings::CLIMATE.heaterOnTempC, 1) + "C to " + String(Settings::CLIMATE.heaterOffTempC, 1) + "C</div>";
-      html += String("<div class='card'><strong>Grow Light Window</strong><br>") + String(Settings::CLIMATE.growLightStartMinutes / 60U) + ":" + String(Settings::CLIMATE.growLightStartMinutes % 60U < 10U ? "0" : "") + String(Settings::CLIMATE.growLightStartMinutes % 60U) + " to " + String(Settings::CLIMATE.growLightStopMinutes / 60U) + ":" + String(Settings::CLIMATE.growLightStopMinutes % 60U < 10U ? "0" : "") + String(Settings::CLIMATE.growLightStopMinutes % 60U) + "</div>";
+      html += String("<div class='card'><strong>Vent Window</strong><br>") + String(runtimeClimate_.ventCloseTempC, 1) + "C to " + String(runtimeClimate_.ventOpenTempC, 1) + "C</div>";
+      html += String("<div class='card'><strong>Humidity Fan</strong><br>") + String(runtimeClimate_.humidityFanOffPct, 0) + "% to " + String(runtimeClimate_.humidityFanOnPct, 0) + "%</div>";
+      html += String("<div class='card'><strong>Defogger Window</strong><br>") + String(runtimeClimate_.heaterOnTempC, 1) + "C to " + String(runtimeClimate_.heaterOffTempC, 1) + "C</div>";
+      html += String("<div class='card'><strong>Grow Light Window</strong><br>") + String(runtimeClimate_.growLightStartMinutes / 60U) + ":" + String(runtimeClimate_.growLightStartMinutes % 60U < 10U ? "0" : "") + String(runtimeClimate_.growLightStartMinutes % 60U) + " to " + String(runtimeClimate_.growLightStopMinutes / 60U) + ":" + String(runtimeClimate_.growLightStopMinutes % 60U < 10U ? "0" : "") + String(runtimeClimate_.growLightStopMinutes % 60U) + "</div>";
       html += String("<div class='card'><strong>Power Guards</strong><br>Low: ") + String(Settings::BATTERY.lowVoltage, 2) + "V<br>Critical: " + String(Settings::BATTERY.criticalVoltage, 2) + "V</div>";
       html += F("</div></section>");
+
+      html += F("<section><h2>Climate Settings</h2><p class='muted'>Save updated climate thresholds directly from the station dashboard. Editing requires the current station Wi-Fi password, or the node setup password if the station network is open.</p>");
+      html += String("<p class='muted'>Active profile source: <strong>") + (climateOverrideActive_ ? "dashboard override" : "firmware defaults") + "</strong></p>";
+      html += F("<div class='grid'>");
+      html += F("<div class='card'><label for='settings-password'>Settings password</label><input id='settings-password' type='password' autocomplete='current-password' placeholder='Station Wi-Fi password'></div>");
+      html += String("<div class='card'><label for='vent-open-temp'>Vent open temp C</label><input id='vent-open-temp' type='number' step='0.1' value='") + String(runtimeClimate_.ventOpenTempC, 1) + "'></div>";
+      html += String("<div class='card'><label for='vent-close-temp'>Vent close temp C</label><input id='vent-close-temp' type='number' step='0.1' value='") + String(runtimeClimate_.ventCloseTempC, 1) + "'></div>";
+      html += String("<div class='card'><label for='fan-on-temp'>Fan on temp C</label><input id='fan-on-temp' type='number' step='0.1' value='") + String(runtimeClimate_.fanOnTempC, 1) + "'></div>";
+      html += String("<div class='card'><label for='fan-off-temp'>Fan off temp C</label><input id='fan-off-temp' type='number' step='0.1' value='") + String(runtimeClimate_.fanOffTempC, 1) + "'></div>";
+      html += String("<div class='card'><label for='humidity-fan-on'>Humidity fan on %</label><input id='humidity-fan-on' type='number' step='0.1' value='") + String(runtimeClimate_.humidityFanOnPct, 1) + "'></div>";
+      html += String("<div class='card'><label for='humidity-fan-off'>Humidity fan off %</label><input id='humidity-fan-off' type='number' step='0.1' value='") + String(runtimeClimate_.humidityFanOffPct, 1) + "'></div>";
+      html += String("<div class='card'><label for='heater-on-temp'>Defogger on temp C</label><input id='heater-on-temp' type='number' step='0.1' value='") + String(runtimeClimate_.heaterOnTempC, 1) + "'></div>";
+      html += String("<div class='card'><label for='heater-off-temp'>Defogger off temp C</label><input id='heater-off-temp' type='number' step='0.1' value='") + String(runtimeClimate_.heaterOffTempC, 1) + "'></div>";
+      html += String("<div class='card'><label for='water-high-temp'>Water high temp C</label><input id='water-high-temp' type='number' step='0.1' value='") + String(runtimeClimate_.waterHighTempC, 1) + "'></div>";
+      html += String("<div class='card'><label for='water-low-temp'>Water low temp C</label><input id='water-low-temp' type='number' step='0.1' value='") + String(runtimeClimate_.waterLowTempC, 1) + "'></div>";
+      html += String("<div class='card'><label for='grow-light-lux'>Grow-light lux threshold</label><input id='grow-light-lux' type='number' step='1' value='") + String(runtimeClimate_.growLightLuxThreshold, 0) + "'></div>";
+      html += F("</div><div class='action-row'><button type='button' id='save-climate-settings'>Save Climate Settings</button><button type='button' class='secondary' id='reset-climate-settings'>Restore Firmware Defaults</button></div><p id='settings-status' class='muted status-note'>Climate thresholds are loaded from the active controller profile.</p></section>");
     }
 
     html += F("<section><h2>Configure Wi-Fi</h2><div class='notice'><strong>Fast import:</strong> browsers cannot read saved Wi-Fi passwords directly, but many phones and PCs can copy or share a saved network as text or a QR payload. Paste that copied Wi-Fi share text here, use the clipboard button below, or pick a nearby SSID from the scan dropdown.</div>");
@@ -1307,6 +1572,7 @@ class GreenhouseController {
     html += F("<section><h2>Update Firmware</h2><p class='muted'>Upload the latest <code>firmware.bin</code> over Wi-Fi once the node is installed. Use stable power, keep USB as the recovery path, and do not start an update during weather that may need immediate vent control.</p><form method='post' action='/update' enctype='multipart/form-data'><label for='firmware'>Firmware binary</label><input id='firmware' name='firmware' type='file' accept='.bin,application/octet-stream' required><button type='submit'>Install Firmware Update</button></form></section>");
     if (WiFi.status() == WL_CONNECTED) {
       html += buildLiveDashboardScript();
+      html += buildClimateSettingsScript();
     }
     html += F("</main></body></html>");
     return html;
@@ -1314,6 +1580,10 @@ class GreenhouseController {
 
   String buildLiveDashboardScript() const {
     return F("<script>(function(){const statusEl=document.getElementById('control-status');if(!statusEl){return;}const modeButtons=document.querySelectorAll('[data-mode]');const actuatorButtons=document.querySelectorAll('[data-actuator]');function setText(id,text){const el=document.getElementById(id);if(el){el.textContent=text;}}function fmtNumber(value,digits,suffix){return typeof value==='number'&&isFinite(value)?value.toFixed(digits)+suffix:'N/A';}function fmtWhole(value,suffix){return typeof value==='number'&&isFinite(value)?String(Math.round(value))+suffix:'N/A';}function fmtDuration(ms){if(typeof ms!=='number'||!isFinite(ms)){return 'N/A';}const totalSeconds=Math.floor(ms/1000);const hours=Math.floor(totalSeconds/3600);const minutes=Math.floor((totalSeconds%3600)/60);const seconds=totalSeconds%60;return hours+'h '+minutes+'m '+seconds+'s';}async function postForm(url,fields){const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:new URLSearchParams(fields).toString(),cache:'no-store'});const payload=await response.json().catch(function(){return {ok:false,message:'Controller returned invalid JSON.'};});if(!response.ok&&(!payload||!payload.message)){payload={ok:false,message:'Request failed.'};}return payload;}function applyState(state){setText('live-mode',state&&state.mode?state.mode:'N/A');setText('live-controller',state&&state.controller_state?state.controller_state:'N/A');setText('manual-flag',state&&state.manual_override&&state.manual_override.active?'ACTIVE':'OFF');setText('live-air',state&&state.air&&state.air.available?fmtNumber(state.air.temp_c,1,' C')+' / '+fmtWhole(state.air.humidity_pct,' %'):'N/A');setText('live-water',state&&state.water&&state.water.available?fmtNumber(state.water.temp_c,1,' C'):'N/A');setText('live-light',state&&state.light&&state.light.available?fmtWhole(state.light.lux,' lux'):'N/A');setText('live-battery',state&&state.battery&&state.battery.available?fmtWhole(state.battery.percent,' %')+' / '+fmtNumber(state.battery.voltage_v,2,' V'):'N/A');setText('live-uptime',state?fmtDuration(state.uptime_ms):'N/A');setText('actuator-top',state&&state.actuators&&state.actuators.top_open?'OPEN':'SHUT');setText('actuator-bottom',state&&state.actuators&&state.actuators.bottom_open?'OPEN':'SHUT');setText('actuator-exhaust',state&&state.actuators&&state.actuators.fan_exhaust?'ON':'OFF');setText('actuator-intake',state&&state.actuators&&state.actuators.fan_intake?'ON':'OFF');setText('actuator-defogger',state&&state.actuators&&state.actuators.defogger?'ON':'OFF');setText('actuator-grow-light',state&&state.actuators&&state.actuators.grow_light?'ON':'OFF');setText('actuator-circulation',state&&state.actuators&&state.actuators.circulation?'ON':'OFF');if(state&&state.safe_mode&&state.safe_mode.active){statusEl.textContent='Safe mode active: '+state.safe_mode.reason+'. Live commands are locked until the fault clears.';return;}if(state&&state.manual_override&&state.manual_override.active){statusEl.textContent='Manual override active. Return to Auto to hand control back to greenhouse logic.';return;}statusEl.textContent='Live dashboard connected. Controls are available over normal LAN access.';}async function refreshState(){try{const response=await fetch('/api/state',{cache:'no-store'});const state=await response.json();applyState(state);}catch(error){statusEl.textContent='Live refresh failed. Reload after the node settles on Wi-Fi.';}}modeButtons.forEach(function(button){button.addEventListener('click',async function(){statusEl.textContent='Sending controller mode command...';const payload=await postForm('/api/control/mode',{mode:button.getAttribute('data-mode')||''});statusEl.textContent=payload&&payload.message?payload.message:'Mode command sent.';refreshState();});});actuatorButtons.forEach(function(button){button.addEventListener('click',async function(){statusEl.textContent='Sending actuator command...';const payload=await postForm('/api/control/actuator',{actuator:button.getAttribute('data-actuator')||'',state:button.getAttribute('data-state')||''});statusEl.textContent=payload&&payload.message?payload.message:'Actuator command sent.';refreshState();});});refreshState();window.setInterval(refreshState,2000);})();</script>");
+  }
+
+  String buildClimateSettingsScript() const {
+    return F("<script>(function(){const statusEl=document.getElementById('settings-status');if(!statusEl){return;}const saveButton=document.getElementById('save-climate-settings');const resetButton=document.getElementById('reset-climate-settings');const passwordEl=document.getElementById('settings-password');const fields={vent_open_temp_c:document.getElementById('vent-open-temp'),vent_close_temp_c:document.getElementById('vent-close-temp'),fan_on_temp_c:document.getElementById('fan-on-temp'),fan_off_temp_c:document.getElementById('fan-off-temp'),humidity_fan_on_pct:document.getElementById('humidity-fan-on'),humidity_fan_off_pct:document.getElementById('humidity-fan-off'),heater_on_temp_c:document.getElementById('heater-on-temp'),heater_off_temp_c:document.getElementById('heater-off-temp'),water_high_temp_c:document.getElementById('water-high-temp'),water_low_temp_c:document.getElementById('water-low-temp'),grow_light_lux_threshold:document.getElementById('grow-light-lux')};function setValue(id,value,digits){const el=fields[id];if(el&&typeof value==='number'&&isFinite(value)){el.value=digits>=0?value.toFixed(digits):String(value);}}function applyPayload(payload){if(!payload||!payload.climate){return;}setValue('vent_open_temp_c',payload.climate.vent_open_temp_c,1);setValue('vent_close_temp_c',payload.climate.vent_close_temp_c,1);setValue('fan_on_temp_c',payload.climate.fan_on_temp_c,1);setValue('fan_off_temp_c',payload.climate.fan_off_temp_c,1);setValue('humidity_fan_on_pct',payload.climate.humidity_fan_on_pct,1);setValue('humidity_fan_off_pct',payload.climate.humidity_fan_off_pct,1);setValue('heater_on_temp_c',payload.climate.heater_on_temp_c,1);setValue('heater_off_temp_c',payload.climate.heater_off_temp_c,1);setValue('water_high_temp_c',payload.climate.water_high_temp_c,1);setValue('water_low_temp_c',payload.climate.water_low_temp_c,1);setValue('grow_light_lux_threshold',payload.climate.grow_light_lux_threshold,0);}async function postSettings(url,body){const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:new URLSearchParams(body).toString(),cache:'no-store'});const payload=await response.json().catch(function(){return {ok:false,message:'Controller returned invalid settings JSON.'};});if(payload){applyPayload(payload);}statusEl.textContent=payload&&payload.message?payload.message:'Settings request finished.';}saveButton.addEventListener('click',async function(){const password=passwordEl&&passwordEl.value?passwordEl.value:'';const body={password:password};Object.keys(fields).forEach(function(key){body[key]=fields[key]&&fields[key].value?fields[key].value:'';});statusEl.textContent='Saving climate thresholds...';await postSettings('/api/settings/climate',body);});resetButton.addEventListener('click',async function(){const password=passwordEl&&passwordEl.value?passwordEl.value:'';statusEl.textContent='Restoring firmware climate defaults...';await postSettings('/api/settings/climate/reset',{password:password});});})();</script>");
   }
 
   String htmlEscape(const char *value) const {
@@ -1434,25 +1704,7 @@ class GreenhouseController {
 
   void applyConfigurationSafety() {
     GreenhouseRuntime::ValidationInput input{};
-    input.climate = Settings::CLIMATE;
-    input.freshness.airMaxAgeMs = Settings::RELIABILITY.airDataMaxAgeMs;
-    input.freshness.waterMaxAgeMs = Settings::RELIABILITY.waterDataMaxAgeMs;
-    input.freshness.lightMaxAgeMs = Settings::RELIABILITY.lightDataMaxAgeMs;
-    input.sampleIntervalMs = Settings::LOGGING.sampleIntervalMs;
-    input.displayIntervalMs = Settings::LOGGING.displayIntervalMs;
-    input.controlIntervalMs = Settings::LOGGING.controlIntervalMs;
-    input.otaPollIntervalMs = Settings::LOGGING.otaPollIntervalMs;
-    input.mqttPublishIntervalMs = Settings::MQTT.publishIntervalMs;
-    input.loraMaxRetries = Settings::LORA.maxRetries;
-    input.loraRetryBackoffMs = Settings::LORA.retryBackoffMs;
-    input.batteryLowVoltage = Settings::BATTERY.lowVoltage;
-    input.batteryCriticalVoltage = Settings::BATTERY.criticalVoltage;
-    input.batteryFullVoltage = Settings::BATTERY.fullVoltage;
-    input.batteryEmptyVoltage = Settings::BATTERY.emptyVoltage;
-    input.topClosedDegrees = Settings::SERVOS.topClosedDegrees;
-    input.topOpenDegrees = Settings::SERVOS.topOpenDegrees;
-    input.bottomClosedDegrees = Settings::SERVOS.bottomClosedDegrees;
-    input.bottomOpenDegrees = Settings::SERVOS.bottomOpenDegrees;
+    populateValidationInput(input, runtimeClimate_);
 
     configFault_ = GreenhouseRuntime::validateConfiguration(input);
     if (configFault_ != ConfigFault::none) {
@@ -1521,13 +1773,13 @@ class GreenhouseController {
     struct tm timeInfo {};
     const bool hasTime = currentLocalTime(&timeInfo);
     const uint32_t currentMinute = hasTime ? static_cast<uint32_t>(timeInfo.tm_hour * 60U + timeInfo.tm_min) : 0U;
-    const bool daylight = GreenhouseLogic::resolveDaylight(snapshot_, Settings::CLIMATE, hasTime, currentMinute);
+    const bool daylight = GreenhouseLogic::resolveDaylight(snapshot_, runtimeClimate_, hasTime, currentMinute);
 
     actuators_ = GreenhouseLogic::evaluateActuators({
         snapshot_,
         actuators_,
         mode_,
-        Settings::CLIMATE,
+      runtimeClimate_,
         Settings::controlSystemConfig(),
         daylight,
         hasTime,
@@ -2273,6 +2525,10 @@ class GreenhouseController {
     mqttClient_.publish(topic, payload, true);
   }
 
+  float finiteOrDefault(float value, float fallback = 0.0F) const {
+    return isnan(value) || isinf(value) ? fallback : value;
+  }
+
   void buildTelemetryPayload(char *payload, size_t payloadSize) {
     const CropProfile &profile = GreenhouseLogic::cropProfile(Settings::CROP.profile);
     const RecentFaultEntry latestFault = latestRecentFault();
@@ -2289,22 +2545,22 @@ class GreenhouseController {
              cropStatusLabel(metrics_.cropStatus),
              snapshot_.airAvailable ? "true" : "false",
              static_cast<unsigned long>(snapshot_.airAgeMs),
-             snapshot_.airTempC,
-             snapshot_.humidityPct,
+             finiteOrDefault(snapshot_.airTempC),
+             finiteOrDefault(snapshot_.humidityPct),
              snapshot_.waterAvailable ? "true" : "false",
              static_cast<unsigned long>(snapshot_.waterAgeMs),
-             snapshot_.waterTempC,
+             finiteOrDefault(snapshot_.waterTempC),
              snapshot_.lightAvailable ? "true" : "false",
              static_cast<unsigned long>(snapshot_.lightAgeMs),
-             snapshot_.lightLux,
-             metrics_.vpdAvailable ? metrics_.vaporPressureDeficitKPa : 0.0F,
-             metrics_.dewPointAvailable ? metrics_.dewPointC : 0.0F,
+             finiteOrDefault(snapshot_.lightLux),
+             metrics_.vpdAvailable ? finiteOrDefault(metrics_.vaporPressureDeficitKPa) : 0.0F,
+             metrics_.dewPointAvailable ? finiteOrDefault(metrics_.dewPointC) : 0.0F,
              metrics_.frostRisk ? "true" : "false",
              battery_.available ? "true" : "false",
              battery_.calibrated ? "true" : "false",
              static_cast<int>(PinMap::BATTERY_ADC_CTRL),
              static_cast<unsigned long>(battery_.rawMilliVolts),
-             battery_.voltageV,
+             finiteOrDefault(battery_.voltageV),
              battery_.percent,
              batteryBandLabel(battery_),
              battery_.low ? "true" : "false",
@@ -2438,6 +2694,7 @@ class GreenhouseController {
   ActuatorState actuators_;
   ActuatorState effectiveActuators_;
   ActuatorState manualActuators_;
+  ClimateConfig runtimeClimate_ = Settings::CLIMATE;
   ControlMode mode_ = ControlMode::automatic;
   ControllerState controllerState_ = ControllerState::automatic;
   PowerBudget powerBudget_{};
@@ -2455,6 +2712,7 @@ class GreenhouseController {
   bool discoveryPublished_ = false;
   bool safeMode_ = false;
   bool manualOverrideActive_ = false;
+  bool climateOverrideActive_ = false;
   bool bootHealthy_ = false;
   bool rehomeAfterUnsafeReset_ = false;
   CommandAudit lastCommandAudit_{};
