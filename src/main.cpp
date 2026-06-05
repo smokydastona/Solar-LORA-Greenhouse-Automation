@@ -997,7 +997,8 @@ class GreenhouseController {
 
   void handlePortalProbeRequest() {
     if (setupApActive_) {
-      sendPortalRedirect();
+      webServer_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      webServer_.send(204, "text/plain; charset=utf-8", "");
       return;
     }
     handleDashboardRequest();

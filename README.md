@@ -159,7 +159,7 @@ Difficulty is moderate for someone comfortable with low-voltage wiring, Platform
 2. Either preseed Wi-Fi in [include/Settings.h](./include/Settings.h) or leave it blank and use the node's built-in setup portal on first boot.
 3. Wire the hardware according to [docs/WIRING_5V.md](./docs/WIRING_5V.md), choosing either the current owned-hardware DHT22 plus SG90 path or the fuller BME280 plus BH1750 plus DS18B20 upgrade path.
 4. Flash the firmware to the ESP32-S3 board.
-5. If the node starts in setup mode, join the broadcast setup SSID, open `http://192.168.4.1/`, choose a nearby SSID from the scan dropdown, and then either paste or import copied Wi-Fi share text from your phone or PC or enter only the password manually.
+5. If the node starts in setup mode, join the broadcast setup SSID and open `http://192.168.4.1/` manually instead of relying on any captive-portal popup. Then choose a nearby SSID from the scan dropdown and either paste or import copied Wi-Fi share text from your phone or PC or enter only the password manually.
 6. After the node is installed on stable Wi-Fi, use the dashboard firmware-upload form with the built `firmware.bin` whenever you want an in-place update.
 6. Commission the system using the checklist in [docs/BUILD_GUIDE_5V.md](./docs/BUILD_GUIDE_5V.md).
 
