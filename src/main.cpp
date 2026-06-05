@@ -341,6 +341,7 @@ class GreenhouseController {
     serviceServoProtection(now);
     pollButtons();
     serviceWifi(now);
+    updateDisplaySleep(now);
 
     if (now - lastControlAt_ >= Settings::LOGGING.controlIntervalMs) {
       lastControlAt_ = now;
@@ -355,7 +356,9 @@ class GreenhouseController {
 
     if (now - lastDisplayAt_ >= Settings::LOGGING.displayIntervalMs) {
       lastDisplayAt_ = now;
-      renderDisplay(false);
+      if (!displaySleeping_) {
+        renderDisplay(false);
+      }
       markProgress(now);
     }
 
@@ -420,6 +423,8 @@ class GreenhouseController {
 
   void initDisplay() {
     displayReady_ = GreenhouseHal::initDisplay(display_);
+    displaySleeping_ = false;
+    lastDisplayActivityAt_ = millis();
   }
 
   void showBootBanner() {
@@ -675,18 +680,26 @@ class GreenhouseController {
   }
 
   void pollButtons() {
-    if (safeMode_ && modeButton_.pressed()) {
+    const bool modePressed = modeButton_.pressed();
+    const bool forceOpenPressed = forceOpenButton_.pressed();
+    const bool forceClosePressed = forceCloseButton_.pressed();
+
+    if (modePressed || forceOpenPressed || forceClosePressed) {
+      noteDisplayActivity(millis());
+    }
+
+    if (safeMode_ && modePressed) {
       clearBootFailureState();
       ESP.restart();
       return;
     }
-    if (modeButton_.pressed()) {
+    if (modePressed) {
       setMode(ControlMode::automatic);
     }
-    if (forceOpenButton_.pressed()) {
+    if (forceOpenPressed) {
       setMode(ControlMode::forceOpen);
     }
-    if (forceCloseButton_.pressed()) {
+    if (forceClosePressed) {
       setMode(ControlMode::forceClosed);
     }
   }
@@ -1691,6 +1704,30 @@ class GreenhouseController {
     renderDisplay(true);
   }
 
+  void noteDisplayActivity(uint32_t now) {
+    if (!displayReady_) {
+      return;
+    }
+
+    lastDisplayActivityAt_ = now;
+    if (displaySleeping_) {
+      GreenhouseHal::setDisplayPower(display_, true);
+      displaySleeping_ = false;
+    }
+  }
+
+  void updateDisplaySleep(uint32_t now) {
+    if (!displayReady_ || displaySleeping_ || Settings::OLED.screenSaverTimeoutMs == 0UL) {
+      return;
+    }
+    if (now - lastDisplayActivityAt_ < Settings::OLED.screenSaverTimeoutMs) {
+      return;
+    }
+
+    GreenhouseHal::setDisplayPower(display_, false);
+    displaySleeping_ = true;
+  }
+
   SensorSnapshot readSensors(uint32_t now) {
     return GreenhouseHal::readSensors(now,
                                       bme_,
@@ -1904,6 +1941,13 @@ class GreenhouseController {
 
   void renderDisplay(bool fullRefresh) {
     if (!displayReady_) {
+      return;
+    }
+
+    if (fullRefresh) {
+      noteDisplayActivity(millis());
+    }
+    if (displaySleeping_) {
       return;
     }
 
@@ -2701,6 +2745,7 @@ class GreenhouseController {
 
   SensorHardwareState sensorHardware_{};
   bool displayReady_ = false;
+  bool displaySleeping_ = false;
   bool filesystemReady_ = false;
   bool otaReady_ = false;
   bool firmwareUploadSucceeded_ = false;
@@ -2734,6 +2779,7 @@ class GreenhouseController {
 
   uint32_t lastControlAt_ = 0;
   uint32_t lastDisplayAt_ = 0;
+  uint32_t lastDisplayActivityAt_ = 0;
   uint32_t lastLogAt_ = 0;
   uint32_t lastOtaAt_ = 0;
   uint32_t lastWifiConnectAttemptAt_ = 0;

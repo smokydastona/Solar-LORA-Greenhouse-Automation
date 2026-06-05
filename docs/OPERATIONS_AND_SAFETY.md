@@ -7,6 +7,7 @@ See [SAFETY_MODEL.md](./SAFETY_MODEL.md) for the quick reference showing which s
 - Leave the controller in `AUTO` mode for normal operation.
 - Use `OPEN` mode only when you intentionally want emergency venting or hands-on access.
 - Use `CLOSED` mode only for servicing, storm prep, or a specific cold-night hold.
+- The OLED blanks itself after several idle minutes to reduce burn-in. Wake it with any local mode button or another mode-changing action before treating a dark panel as a fault.
 - If you change climate thresholds from the station dashboard, make one change at a time and watch at least one control cycle before changing the next threshold.
 
 ## Safe-use rules for non-technical users

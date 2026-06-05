@@ -35,6 +35,10 @@ struct LoggingConfig {
   uint32_t otaPollIntervalMs;
 };
 
+struct OledConfig {
+  uint32_t screenSaverTimeoutMs;
+};
+
 struct DiagnosticsConfig {
   uint8_t recentFaultCapacity;
   uint8_t loraQueueWarningDepth;
@@ -143,6 +147,10 @@ constexpr LoggingConfig LOGGING{
     2000UL,
     5000UL,
     10000UL,
+};
+
+constexpr OledConfig OLED{
+  300000UL,
 };
 
 constexpr DiagnosticsConfig DIAGNOSTICS{

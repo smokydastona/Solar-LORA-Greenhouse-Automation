@@ -28,6 +28,10 @@ bool initDisplay(Adafruit_SSD1306 &display) {
   return displayReady;
 }
 
+void setDisplayPower(Adafruit_SSD1306 &display, bool enabled) {
+  display.ssd1306_command(enabled ? SSD1306_DISPLAYON : SSD1306_DISPLAYOFF);
+}
+
 void showBootBanner(Adafruit_SSD1306 &display,
                     esp_reset_reason_t lastResetReason,
                     const char *firmwareVersion,

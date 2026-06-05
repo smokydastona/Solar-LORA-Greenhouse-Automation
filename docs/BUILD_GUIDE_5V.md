@@ -33,13 +33,15 @@ This is the build sequence for the complete first-generation controller system i
 1. Flash the ESP32-S3 board with the firmware in this repository.
 2. Power the board from USB only.
 3. Verify the onboard OLED display initializes.
-4. Verify the serial console starts at 115200 baud.
-5. If no Wi-Fi credentials are preloaded, verify the board starts its setup AP, note the broadcast SSID and password from serial or OLED, join that AP, and then open `http://192.168.4.1/` manually. The node no longer relies on captive-portal auto-launch because some phones and PCs open unrelated connectivity-check pages instead.
-6. Save the target greenhouse Wi-Fi credentials through the node web page and let the board restart. Use the nearby-network scan dropdown to choose the SSID locally, then either type only the password or use the portal's import box or clipboard button if your phone or PC can copy or share a saved Wi-Fi network as text or QR data. The portal now shows the configured station target and whether a password is stored, and it will refuse a blank password for nearby secured networks.
-7. After restart, verify the node dashboard is reachable on the address shown by the board. In station mode the page now switches from setup-only onboarding into a live dashboard with current telemetry, mode buttons, and per-output manual override controls.
-8. Verify the browser-based firmware upload page using a known-good `firmware.bin` if you want in-place updates after installation. If you browse from a phone or laptop running a VPN, the node firmware will still answer on the LAN, but some VPN clients block local subnet access on the client side.
-9. If LoRa transport is enabled in [../include/Settings.h](../include/Settings.h), confirm the configured radio frequency matches your legal regional band before first on-air transmission.
-10. If you plan to tune thresholds from the station dashboard, test one save and one restore-default cycle while the board is still on the bench. Saving climate settings now requires the current station Wi-Fi password, or the setup-password fallback if the station network is open.
+4. Let the controller sit untouched for at least the configured OLED screen-saver timeout and verify the display blanks itself instead of leaving the same pixels lit continuously.
+5. Press any local mode button or trigger a mode-changing action from the dashboard and verify the OLED wakes immediately.
+6. Verify the serial console starts at 115200 baud.
+7. If no Wi-Fi credentials are preloaded, verify the board starts its setup AP, note the broadcast SSID and password from serial or OLED, join that AP, and then open `http://192.168.4.1/` manually. The node no longer relies on captive-portal auto-launch because some phones and PCs open unrelated connectivity-check pages instead.
+8. Save the target greenhouse Wi-Fi credentials through the node web page and let the board restart. Use the nearby-network scan dropdown to choose the SSID locally, then either type only the password or use the portal's import box or clipboard button if your phone or PC can copy or share a saved Wi-Fi network as text or QR data. The portal now shows the configured station target and whether a password is stored, and it will refuse a blank password for nearby secured networks.
+9. After restart, verify the node dashboard is reachable on the address shown by the board. In station mode the page now switches from setup-only onboarding into a live dashboard with current telemetry, mode buttons, and per-output manual override controls.
+10. Verify the browser-based firmware upload page using a known-good `firmware.bin` if you want in-place updates after installation. If you browse from a phone or laptop running a VPN, the node firmware will still answer on the LAN, but some VPN clients block local subnet access on the client side.
+11. If LoRa transport is enabled in [../include/Settings.h](../include/Settings.h), confirm the configured radio frequency matches your legal regional band before first on-air transmission.
+12. If you plan to tune thresholds from the station dashboard, test one save and one restore-default cycle while the board is still on the bench. Saving climate settings now requires the current station Wi-Fi password, or the setup-password fallback if the station network is open.
 
 ## Stage 2: wire the sensor bus
 
