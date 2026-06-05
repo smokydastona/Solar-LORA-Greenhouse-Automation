@@ -32,6 +32,11 @@ void setDisplayPower(Adafruit_SSD1306 &display, bool enabled) {
   display.ssd1306_command(enabled ? SSD1306_DISPLAYON : SSD1306_DISPLAYOFF);
 }
 
+void setDisplayContrast(Adafruit_SSD1306 &display, uint8_t contrast) {
+  display.ssd1306_command(SSD1306_SETCONTRAST);
+  display.ssd1306_command(contrast);
+}
+
 void showBootBanner(Adafruit_SSD1306 &display,
                     esp_reset_reason_t lastResetReason,
                     const char *firmwareVersion,

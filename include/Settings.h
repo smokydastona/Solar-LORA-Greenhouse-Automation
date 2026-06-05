@@ -37,6 +37,11 @@ struct LoggingConfig {
 
 struct OledConfig {
   uint32_t screenSaverTimeoutMs;
+  uint32_t screenSaverFrameIntervalMs;
+  uint32_t screenSaverModeBaseMs;
+  uint32_t screenSaverModeJitterMs;
+  uint8_t activeContrast;
+  uint8_t screenSaverContrast;
 };
 
 struct DiagnosticsConfig {
@@ -151,6 +156,11 @@ constexpr LoggingConfig LOGGING{
 
 constexpr OledConfig OLED{
   300000UL,
+  120UL,
+  20000UL,
+  20000UL,
+  0xCF,
+  0x2F,
 };
 
 constexpr DiagnosticsConfig DIAGNOSTICS{

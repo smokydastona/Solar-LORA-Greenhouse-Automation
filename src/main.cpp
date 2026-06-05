@@ -65,6 +65,9 @@ constexpr uint32_t kWifiReconnectIntervalMs = 30000UL;
 constexpr uint32_t kWifiScanCooldownMs = 30000UL;
 constexpr uint32_t kWifiScanRetryDelayMs = 5000UL;
 constexpr const char *kSetupApIp = "192.168.4.1";
+constexpr uint8_t kScreenSaverGrassCount = 18U;
+constexpr uint8_t kScreenSaverParticleCount = 6U;
+constexpr uint32_t kScreenSaverRegenerationMs = 5000UL;
 static_assert(kRecentFaultCapacity == Settings::DIAGNOSTICS.recentFaultCapacity,
               "Recent fault capacity must match diagnostics settings.");
 
@@ -112,6 +115,32 @@ struct RecentFaultEntry {
   uint32_t atMs = 0;
   int32_t detail = 0;
   uint32_t bootCount = 0;
+};
+
+enum class ScreenSaverMode : uint8_t {
+  night = 0,
+  growth,
+};
+
+struct ScreenSaverBlade {
+  int16_t baseX = 0;
+  uint8_t height = 0;
+  int8_t phase = 0;
+};
+
+struct ScreenSaverParticle {
+  int16_t x8 = 0;
+  int16_t y8 = 0;
+  int8_t vx8 = 0;
+  uint8_t vy8 = 1;
+  uint8_t twinkle = 0;
+};
+
+struct ScreenSaverPlant {
+  int16_t baseX = Settings::DISPLAY_WIDTH / 2;
+  uint16_t ageFrames = 0;
+  int8_t leanBias = 0;
+  uint8_t leafSpan = 4;
 };
 
 const char *resetReasonLabel(esp_reset_reason_t reason) {
@@ -354,11 +383,12 @@ class GreenhouseController {
       markProgress(now);
     }
 
-    if (now - lastDisplayAt_ >= Settings::LOGGING.displayIntervalMs) {
+    const uint32_t displayInterval = displaySleeping_
+                                         ? Settings::OLED.screenSaverFrameIntervalMs
+                                         : Settings::LOGGING.displayIntervalMs;
+    if (now - lastDisplayAt_ >= displayInterval) {
       lastDisplayAt_ = now;
-      if (!displaySleeping_) {
-        renderDisplay(false);
-      }
+      renderDisplay(false);
       markProgress(now);
     }
 
@@ -425,6 +455,10 @@ class GreenhouseController {
     displayReady_ = GreenhouseHal::initDisplay(display_);
     displaySleeping_ = false;
     lastDisplayActivityAt_ = millis();
+    GreenhouseHal::setDisplayPower(display_, true);
+    GreenhouseHal::setDisplayContrast(display_, Settings::OLED.activeContrast);
+    randomSeed(static_cast<uint32_t>(esp_random()));
+    initScreenSaver(millis());
   }
 
   void showBootBanner() {
@@ -1712,6 +1746,7 @@ class GreenhouseController {
     lastDisplayActivityAt_ = now;
     if (displaySleeping_) {
       GreenhouseHal::setDisplayPower(display_, true);
+      GreenhouseHal::setDisplayContrast(display_, Settings::OLED.activeContrast);
       displaySleeping_ = false;
     }
   }
@@ -1724,8 +1759,180 @@ class GreenhouseController {
       return;
     }
 
-    GreenhouseHal::setDisplayPower(display_, false);
+    GreenhouseHal::setDisplayContrast(display_, Settings::OLED.screenSaverContrast);
     displaySleeping_ = true;
+    initScreenSaver(now);
+    renderDisplay(false);
+    lastDisplayAt_ = now;
+  }
+
+  void initScreenSaver(uint32_t now) {
+    screenSaverFrame_ = 0;
+    resetScreenSaverScene(now, static_cast<ScreenSaverMode>(random(0, 2)));
+  }
+
+  void resetScreenSaverScene(uint32_t now, ScreenSaverMode mode) {
+    screenSaverMode_ = mode;
+    screenSaverDriftX_ = static_cast<int8_t>(random(-2, 3));
+    screenSaverDriftY_ = static_cast<int8_t>(random(-1, 2));
+    resetScreenSaverGrass();
+    resetScreenSaverParticles();
+    resetScreenSaverPlant();
+    lastScreenSaverRefreshAt_ = now;
+    const uint32_t jitter = Settings::OLED.screenSaverModeJitterMs == 0UL
+                                ? 0UL
+                                : static_cast<uint32_t>(random(static_cast<long>(Settings::OLED.screenSaverModeJitterMs)));
+    nextScreenSaverModeSwitchAt_ = now + Settings::OLED.screenSaverModeBaseMs + jitter;
+  }
+
+  void resetScreenSaverGrass() {
+    for (uint8_t index = 0; index < kScreenSaverGrassCount; ++index) {
+      screenSaverGrass_[index].baseX = static_cast<int16_t>(random(-4, Settings::DISPLAY_WIDTH + 4));
+      screenSaverGrass_[index].height = static_cast<uint8_t>(random(4, 11));
+      screenSaverGrass_[index].phase = static_cast<int8_t>(random(0, 20));
+    }
+  }
+
+  void resetScreenSaverParticle(ScreenSaverParticle &particle, bool highStart) {
+    const int16_t minimumY = static_cast<int16_t>(highStart ? Settings::DISPLAY_HEIGHT / 2 : Settings::DISPLAY_HEIGHT);
+    particle.x8 = static_cast<int16_t>(random(0, Settings::DISPLAY_WIDTH * 8));
+    particle.y8 = static_cast<int16_t>(random(minimumY, Settings::DISPLAY_HEIGHT + 10) * 8);
+    particle.vx8 = static_cast<int8_t>(random(-2, 3));
+    particle.vy8 = static_cast<uint8_t>(random(1, 4));
+    particle.twinkle = static_cast<uint8_t>(random(0, 4));
+  }
+
+  void resetScreenSaverParticles() {
+    for (uint8_t index = 0; index < kScreenSaverParticleCount; ++index) {
+      resetScreenSaverParticle(screenSaverParticles_[index], false);
+    }
+  }
+
+  void resetScreenSaverPlant() {
+    screenSaverPlant_.baseX = static_cast<int16_t>(random(24, Settings::DISPLAY_WIDTH - 24));
+    screenSaverPlant_.ageFrames = 0;
+    screenSaverPlant_.leanBias = static_cast<int8_t>(random(-3, 4));
+    screenSaverPlant_.leafSpan = static_cast<uint8_t>(random(4, 8));
+  }
+
+  int16_t triangleWave(uint16_t phase, uint8_t amplitude) const {
+    if (amplitude == 0U) {
+      return 0;
+    }
+    const uint8_t period = static_cast<uint8_t>(amplitude * 4U);
+    const uint8_t folded = static_cast<uint8_t>(phase % period);
+    if (folded < amplitude * 2U) {
+      return static_cast<int16_t>(folded) - static_cast<int16_t>(amplitude);
+    }
+    return static_cast<int16_t>(amplitude * 3U) - static_cast<int16_t>(folded);
+  }
+
+  void updateScreenSaver(uint32_t now) {
+    ++screenSaverFrame_;
+    if (now - lastScreenSaverRefreshAt_ >= kScreenSaverRegenerationMs) {
+      screenSaverDriftX_ = static_cast<int8_t>(random(-2, 3));
+      screenSaverDriftY_ = static_cast<int8_t>(random(-1, 2));
+      resetScreenSaverGrass();
+      lastScreenSaverRefreshAt_ = now;
+    }
+    if (now >= nextScreenSaverModeSwitchAt_) {
+      const ScreenSaverMode nextMode = screenSaverMode_ == ScreenSaverMode::night
+                                           ? ScreenSaverMode::growth
+                                           : ScreenSaverMode::night;
+      resetScreenSaverScene(now, nextMode);
+    }
+
+    for (uint8_t index = 0; index < kScreenSaverParticleCount; ++index) {
+      ScreenSaverParticle &particle = screenSaverParticles_[index];
+      particle.x8 += particle.vx8;
+      particle.y8 -= particle.vy8;
+      if (((screenSaverFrame_ + index) % 7U) == 0U) {
+        const int16_t updated = particle.vx8 + static_cast<int8_t>(random(-1, 2));
+        particle.vx8 = static_cast<int8_t>(constrain(updated, -3, 3));
+      }
+
+      if (particle.x8 < 0) {
+        particle.x8 += static_cast<int16_t>(Settings::DISPLAY_WIDTH * 8);
+      } else if (particle.x8 >= static_cast<int16_t>(Settings::DISPLAY_WIDTH * 8)) {
+        particle.x8 -= static_cast<int16_t>(Settings::DISPLAY_WIDTH * 8);
+      }
+
+      if (particle.y8 < 8) {
+        resetScreenSaverParticle(particle, screenSaverMode_ == ScreenSaverMode::night);
+      }
+    }
+
+    if (screenSaverMode_ == ScreenSaverMode::growth) {
+      if (screenSaverPlant_.ageFrames < 180U) {
+        ++screenSaverPlant_.ageFrames;
+      } else {
+        resetScreenSaverPlant();
+      }
+    }
+  }
+
+  void drawScreenSaverGrass() {
+    const int16_t baseY = static_cast<int16_t>(Settings::DISPLAY_HEIGHT - 2 + screenSaverDriftY_);
+    for (uint8_t index = 0; index < kScreenSaverGrassCount; ++index) {
+      const ScreenSaverBlade &blade = screenSaverGrass_[index];
+      const int16_t startX = static_cast<int16_t>(blade.baseX + screenSaverDriftX_);
+      const int16_t sway = triangleWave(static_cast<uint16_t>(screenSaverFrame_ + blade.phase + index), 2U);
+      const int16_t tipX = startX + sway;
+      const int16_t tipY = baseY - blade.height;
+      if (startX < -2 || startX >= Settings::DISPLAY_WIDTH + 2 || tipY < 0) {
+        continue;
+      }
+      display_.drawLine(startX, baseY, tipX, tipY, SSD1306_WHITE);
+    }
+  }
+
+  void drawScreenSaverParticles(bool fireflies) {
+    for (uint8_t index = 0; index < kScreenSaverParticleCount; ++index) {
+      const ScreenSaverParticle &particle = screenSaverParticles_[index];
+      const int16_t x = particle.x8 / 8;
+      const int16_t y = particle.y8 / 8;
+      if (x < 0 || x >= Settings::DISPLAY_WIDTH || y < 0 || y >= Settings::DISPLAY_HEIGHT) {
+        continue;
+      }
+      display_.drawPixel(x, y, SSD1306_WHITE);
+      if (fireflies && ((screenSaverFrame_ + particle.twinkle + index) % 9U) == 0U && x + 1 < Settings::DISPLAY_WIDTH) {
+        display_.drawPixel(x + 1, y, SSD1306_WHITE);
+      }
+    }
+  }
+
+  void drawGrowthPlant() {
+    const int16_t baseY = static_cast<int16_t>(Settings::DISPLAY_HEIGHT - 5 + screenSaverDriftY_);
+    const int16_t sway = triangleWave(static_cast<uint16_t>(screenSaverFrame_ / 2U + screenSaverPlant_.leanBias), 2U);
+    const int16_t x = static_cast<int16_t>(screenSaverPlant_.baseX + screenSaverDriftX_);
+
+    display_.drawPixel(x, baseY, SSD1306_WHITE);
+    display_.drawLine(x, baseY, x + sway, baseY - 3, SSD1306_WHITE);
+
+    if (screenSaverPlant_.ageFrames >= 20U) {
+      const int16_t stemTopY = baseY - static_cast<int16_t>(min<uint16_t>(12U, 4U + screenSaverPlant_.ageFrames / 10U));
+      display_.drawLine(x + sway, baseY - 3, x + sway, stemTopY, SSD1306_WHITE);
+      if (screenSaverPlant_.ageFrames >= 70U) {
+        const int16_t leafY = stemTopY + 4;
+        const uint8_t growthLeafSpan = static_cast<uint8_t>(2U + ((screenSaverPlant_.ageFrames - 70U) / 18U));
+        const int16_t leafSpan = static_cast<int16_t>(min<uint8_t>(screenSaverPlant_.leafSpan, growthLeafSpan));
+        display_.drawLine(x + sway, leafY, x + sway - leafSpan, leafY - 3, SSD1306_WHITE);
+        display_.drawLine(x + sway, leafY, x + sway + leafSpan, leafY - 2, SSD1306_WHITE);
+      }
+    }
+  }
+
+  void renderScreenSaver(uint32_t now) {
+    updateScreenSaver(now);
+    display_.clearDisplay();
+    drawScreenSaverGrass();
+    if (screenSaverMode_ == ScreenSaverMode::night) {
+      drawScreenSaverParticles(true);
+    } else {
+      drawGrowthPlant();
+      drawScreenSaverParticles(false);
+    }
+    display_.display();
   }
 
   SensorSnapshot readSensors(uint32_t now) {
@@ -1948,6 +2155,7 @@ class GreenhouseController {
       noteDisplayActivity(millis());
     }
     if (displaySleeping_) {
+      renderScreenSaver(millis());
       return;
     }
 
@@ -2780,6 +2988,8 @@ class GreenhouseController {
   uint32_t lastControlAt_ = 0;
   uint32_t lastDisplayAt_ = 0;
   uint32_t lastDisplayActivityAt_ = 0;
+  uint32_t lastScreenSaverRefreshAt_ = 0;
+  uint32_t nextScreenSaverModeSwitchAt_ = 0;
   uint32_t lastLogAt_ = 0;
   uint32_t lastOtaAt_ = 0;
   uint32_t lastWifiConnectAttemptAt_ = 0;
@@ -2794,6 +3004,13 @@ class GreenhouseController {
   size_t wifiScanResultCount_ = 0U;
   WifiRuntimeConfig wifiConfig_{};
   WifiScanEntry wifiScanEntries_[kWifiScanResultCapacity]{};
+  ScreenSaverBlade screenSaverGrass_[kScreenSaverGrassCount]{};
+  ScreenSaverParticle screenSaverParticles_[kScreenSaverParticleCount]{};
+  ScreenSaverPlant screenSaverPlant_{};
+  ScreenSaverMode screenSaverMode_ = ScreenSaverMode::night;
+  uint32_t screenSaverFrame_ = 0;
+  int8_t screenSaverDriftX_ = 0;
+  int8_t screenSaverDriftY_ = 0;
   String wifiScanResultsJson_ = "[]";
   char setupApSsid_[20]{};
   char setupApPassword_[16]{};
