@@ -17,6 +17,7 @@ Current behavior:
 - If Wi-Fi credentials are already stored, the node serves its dashboard over the joined network at the IP address shown on serial and OLED.
 - If no Wi-Fi credentials are available or the configured network cannot be joined, the node starts a setup AP and serves the same page at `http://192.168.4.1/`.
 - The page exposes a local status view, a JSON state endpoint at `/api/state`, a nearby-network scan endpoint for SSID selection, Wi-Fi and controller settings forms, clipboard and pasted-text import for copied Wi-Fi share strings or QR payloads, a browser firmware-upload form for `firmware.bin`, and a reset action that clears saved Wi-Fi and reopens setup mode.
+- The display settings section can leave the OLED idle behavior fully blank or switch it to an animated saver that cycles through four scenes instead of repeating one static pattern.
 
 Recommended first-node workflow:
 

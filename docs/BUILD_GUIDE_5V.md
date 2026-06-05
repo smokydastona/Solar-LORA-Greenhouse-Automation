@@ -33,7 +33,7 @@ This is the build sequence for the complete first-generation controller system i
 1. Flash the ESP32-S3 board with the firmware in this repository.
 2. Power the board from USB only.
 3. Verify the onboard OLED display initializes.
-4. Let the controller sit untouched for about 1 minute in normal operation, or about 3 minutes while it is in safe mode, and verify the display switches to its configured idle behavior instead of holding a static status page on the same pixels. Firmware defaults now blank the OLED fully, while the local dashboard can switch that idle behavior to the dim animated screensaver.
+4. Let the controller sit untouched for about 1 minute in normal operation, or about 3 minutes while it is in safe mode, and verify the display switches to its configured idle behavior instead of holding a static status page on the same pixels. Firmware defaults now blank the OLED fully, while the local dashboard can switch that idle behavior to a dim animated screensaver that cycles through fireflies, plant growth, parallax hills, and seasonal particles.
 5. Press any local mode button or trigger a mode-changing action from the dashboard and verify the OLED wakes immediately.
 6. Verify the serial console starts at 115200 baud.
 7. If no Wi-Fi credentials are preloaded, verify the board starts its setup AP, note the broadcast SSID and password from serial or OLED, join that AP, and then open `http://192.168.4.1/` manually. The node no longer relies on captive-portal auto-launch because some phones and PCs open unrelated connectivity-check pages instead.
