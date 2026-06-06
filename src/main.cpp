@@ -1507,22 +1507,28 @@ class GreenhouseController {
       webServer_.send(
           400,
           "text/html; charset=utf-8",
-          String("<html><body><h1>Password required</h1><p>The nearby network <strong>") +
-              htmlEscape(ssid.c_str()) +
-              "</strong> is secured. Enter the Wi-Fi password before saving.</p><p><a href='/'>Return to the setup portal</a></p></body></html>");
+        buildUiMessagePage(
+          "Password required",
+          String("<p>The nearby network <strong>") + htmlEscape(ssid.c_str()) +
+            "</strong> is secured. Enter the Wi-Fi password before saving.</p>",
+          "/",
+          "Return to the setup portal"));
       return;
     }
 
     saveWifiConfig(ssid.c_str(), resolvedPassword.c_str(), hostname.c_str());
     webServer_.send(200,
                     "text/html; charset=utf-8",
-                    String("<html><body><h1>Wi-Fi saved</h1><p>Saved SSID: <strong>") +
-                        htmlEscape(ssid.c_str()) +
-                        "</strong></p><p>Password stored: <strong>" +
-                        String(resolvedPassword.length() > 0 ? "yes" : "no") +
-                        "</strong>" +
-                        (preservedPassword ? " (kept the existing saved password)." : ".") +
-                        "</p><p>The node is restarting and will try the saved network. If it cannot join, reconnect to the setup AP and open http://192.168.4.1/ again.</p></body></html>");
+            buildUiMessagePage(
+              "Wi-Fi saved",
+              String("<p>Saved SSID: <strong>") + htmlEscape(ssid.c_str()) +
+                "</strong></p><p>Password stored: <strong>" +
+                String(resolvedPassword.length() > 0 ? "yes" : "no") +
+                "</strong>" +
+                (preservedPassword ? " (kept the existing saved password)." : ".") +
+                "</p><p>The node is restarting and will try the saved network. If it cannot join, reconnect to the setup AP and open <a href='http://192.168.4.1/'>http://192.168.4.1/</a> again.</p>",
+              "/",
+              "Return to the dashboard"));
     delay(300);
     ESP.restart();
   }
@@ -1533,7 +1539,11 @@ class GreenhouseController {
     preferences_.remove("wifi_host");
     webServer_.send(200,
                     "text/html; charset=utf-8",
-                    "<html><body><h1>Wi-Fi cleared</h1><p>The node is restarting into setup mode. Reconnect to the setup AP and open http://192.168.4.1/.</p></body></html>");
+                    buildUiMessagePage(
+                        "Wi-Fi cleared",
+                        "<p>The node is restarting into setup mode. Reconnect to the setup AP and open <a href='http://192.168.4.1/'>http://192.168.4.1/</a>.</p>",
+                        "/",
+                        "Return to the dashboard"));
     delay(300);
     ESP.restart();
   }
@@ -1542,7 +1552,11 @@ class GreenhouseController {
     if (firmwareUploadSucceeded_) {
       webServer_.send(200,
                       "text/html; charset=utf-8",
-                      "<html><body><h1>Firmware uploaded</h1><p>The node is restarting into the new firmware. Reconnect to the dashboard in about 20 seconds.</p></body></html>");
+                      buildUiMessagePage(
+                          "Firmware uploaded",
+                          "<p>The node is restarting into the new firmware. Reconnect to the dashboard in about 20 seconds.</p>",
+                          "/",
+                          "Return to the dashboard"));
       delay(500);
       ESP.restart();
       return;
@@ -1550,9 +1564,11 @@ class GreenhouseController {
 
     webServer_.send(500,
                     "text/html; charset=utf-8",
-                    String("<html><body><h1>Firmware update failed</h1><p>") +
-                        htmlEscape(firmwareUploadStatus_) +
-                        "</p><p><a href='/'>Return to the dashboard</a></p></body></html>");
+            buildUiMessagePage(
+              "Firmware update failed",
+              String("<p>") + htmlEscape(firmwareUploadStatus_) + "</p>",
+              "/",
+              "Return to the dashboard"));
   }
 
   void handleFirmwareUpload() {
@@ -1634,15 +1650,61 @@ class GreenhouseController {
     webServer_.sendHeader("Location", String("http://") + kSetupApIp + "/", true);
     webServer_.send(302,
                     "text/html; charset=utf-8",
-                    "<html><body><p>Redirecting to the greenhouse setup portal.</p><p><a href='http://192.168.4.1/'>Open portal</a></p></body></html>");
+                    buildUiMessagePage(
+                        "Redirecting",
+                        "<p>Redirecting to the greenhouse setup portal.</p>",
+                        "http://192.168.4.1/",
+                        "Open portal"));
+  }
+
+  String buildUiHead(const char *title) const {
+    String html;
+    html.reserve(5200);
+    html += F("<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>");
+    html += F("<meta name='theme-color' content='#0f1720'>");
+    html += F("<title>");
+    html += htmlEscape(title);
+    html += F("</title><script>(function(){var root=document.documentElement;var theme='auto';try{var saved=localStorage.getItem('greenhouse-ui-theme');if(saved==='light'||saved==='dark'||saved==='auto'){theme=saved;}}catch(e){}function resolved(t){if(t==='light'||t==='dark'){return t;}return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}root.setAttribute('data-theme-mode',theme);root.setAttribute('data-theme',resolved(theme));})();</script><style>");
+    html += F(":root{color-scheme:dark;--bg:#091116;--bg-top:#13212d;--panel:rgba(12,20,29,.88);--panel-soft:rgba(21,33,44,.82);--panel-strong:#10202b;--text:#e8f1f4;--muted:#93a7b3;--line:rgba(129,165,178,.18);--accent:#55d39a;--accent-strong:#36b37e;--accent-soft:rgba(85,211,154,.16);--accent-alt:#6dc7ff;--ok:#72d98f;--warn:#e1bd66;--danger:#ef7d88;--shadow:0 24px 60px rgba(0,0,0,.34);--hero-a:#10212e;--hero-b:#163847;--hero-c:#102f28;}html[data-theme='light']{color-scheme:light;--bg:#edf3f7;--bg-top:#f8fbfd;--panel:rgba(255,255,255,.88);--panel-soft:rgba(243,248,251,.92);--panel-strong:#ffffff;--text:#15232c;--muted:#607483;--line:rgba(73,104,120,.18);--accent:#1f8c68;--accent-strong:#187354;--accent-soft:rgba(31,140,104,.12);--accent-alt:#2e89c7;--ok:#2e8b57;--warn:#a06d14;--danger:#b64a57;--shadow:0 20px 48px rgba(17,39,51,.12);--hero-a:#183546;--hero-b:#20556b;--hero-c:#18463c;}*{box-sizing:border-box;}html,body{min-height:100%;}body{margin:0;font-family:'Segoe UI',Tahoma,Verdana,sans-serif;background:radial-gradient(circle at top,var(--bg-top) 0,var(--bg) 58%,#05090d 100%);color:var(--text);}html[data-theme='light'] body{background:radial-gradient(circle at top,var(--bg-top) 0,var(--bg) 58%,#dde7ee 100%);}body:before{content:'';position:fixed;inset:0;background:linear-gradient(140deg,rgba(109,199,255,.08),transparent 30%),linear-gradient(220deg,rgba(85,211,154,.08),transparent 34%),radial-gradient(circle at 20% 20%,rgba(85,211,154,.10),transparent 18%);pointer-events:none;}main{position:relative;max-width:1120px;margin:0 auto;padding:24px 16px 48px;}section{background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:24px;padding:20px;margin-bottom:18px;box-shadow:var(--shadow);}h1,h2{margin:0 0 12px;}h3{margin:0 0 8px;color:var(--text);}p{line-height:1.6;}a{color:var(--accent-alt);}code{background:rgba(109,199,255,.10);padding:2px 6px;border-radius:6px;} .theme-shell{display:flex;justify-content:flex-end;align-items:center;margin-bottom:12px;} .theme-switcher{display:inline-flex;align-items:center;gap:10px;padding:10px 12px;border-radius:999px;background:rgba(10,16,24,.42);border:1px solid rgba(129,165,178,.18);backdrop-filter:blur(10px);} html[data-theme='light'] .theme-switcher{background:rgba(255,255,255,.78);} .theme-switcher label{margin:0;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);} .theme-switcher select{width:auto;min-width:110px;margin:0;padding:8px 32px 8px 12px;border-radius:999px;} .hero{background:linear-gradient(145deg,var(--hero-a),var(--hero-b) 58%,var(--hero-c));border:none;color:#eef8fb;overflow:hidden;position:relative;} .hero:after{content:'';position:absolute;inset:auto -12% -40% auto;width:340px;height:340px;background:radial-gradient(circle,rgba(109,199,255,.18),transparent 62%);pointer-events:none;} .hero h1,.hero strong{color:#f7fcff;} .hero p{color:#d6e6ee;} .hero-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:18px;align-items:start;} .kicker{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(232,241,244,.16);background:rgba(232,241,244,.08);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px;} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;} .card{background:var(--panel-soft);border-radius:16px;padding:14px;border:1px solid var(--line);} .hero .card{background:rgba(232,241,244,.10);border-color:rgba(232,241,244,.14);color:#f4fbff;} .hero .card strong{display:block;font-size:1.6rem;line-height:1.15;margin-top:8px;} .hero .card span{display:block;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:#d6e7ef;}label{display:block;font-weight:700;margin:10px 0 6px;}input,textarea,select{width:100%;padding:10px;border:1px solid rgba(129,165,178,.24);border-radius:12px;box-sizing:border-box;font:inherit;background:rgba(8,14,21,.68);color:var(--text);} html[data-theme='light'] input,html[data-theme='light'] textarea,html[data-theme='light'] select{background:#fff;} textarea{min-height:88px;resize:vertical;}button{margin-top:12px;padding:10px 14px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-strong));color:#06120f;font-weight:800;cursor:pointer;}button.secondary{background:linear-gradient(135deg,#3b5664,#547586);color:#eef6fb;} html[data-theme='light'] button.secondary{color:#fff;} .action-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;} .action-row button{margin-top:0;} .muted{color:var(--muted);} .notice{background:linear-gradient(135deg,rgba(109,199,255,.08),rgba(85,211,154,.06));border-left:5px solid var(--accent-alt);border-radius:14px;padding:12px 14px;margin:12px 0;} .status-note{min-height:1.4em;margin-top:10px;} .pill-row{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 0;} .pill{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;background:var(--accent-soft);border:1px solid rgba(85,211,154,.18);font-size:.88rem;font-weight:700;color:var(--text);} .pill.ok{background:rgba(114,217,143,.16);color:var(--ok);border-color:rgba(114,217,143,.24);} .pill.warn{background:rgba(225,189,102,.15);color:var(--warn);border-color:rgba(225,189,102,.22);} .pill.danger{background:rgba(239,125,136,.14);color:var(--danger);border-color:rgba(239,125,136,.24);} .section-intro{margin-top:-4px;margin-bottom:14px;max-width:64ch;} .message-wrap{max-width:760px;margin:0 auto;} .message-card{padding:24px;} .message-card h1{margin-bottom:10px;} @media (max-width:860px){.hero-grid{grid-template-columns:1fr;}} @media (max-width:640px){main{padding:16px 12px 40px;}section{padding:16px;border-radius:20px;}.theme-shell{justify-content:stretch;}.theme-switcher{width:100%;justify-content:space-between;}} </style></head><body><main>");
+    return html;
+  }
+
+  String buildUiThemeControl() const {
+    return F("<div class='theme-shell'><div class='theme-switcher'><label for='theme-mode'>Theme</label><select id='theme-mode'><option value='auto'>Auto</option><option value='dark'>Dark</option><option value='light'>Light</option></select></div></div>");
+  }
+
+  String buildUiThemeScript() const {
+    return F("<script>(function(){var select=document.getElementById('theme-mode');if(!select){return;}function apply(mode){var root=document.documentElement;var resolved=mode;if(mode==='auto'){resolved=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}root.setAttribute('data-theme-mode',mode);root.setAttribute('data-theme',resolved);}var current=document.documentElement.getAttribute('data-theme-mode')||'auto';select.value=current;select.addEventListener('change',function(){var mode=select.value||'auto';try{localStorage.setItem('greenhouse-ui-theme',mode);}catch(e){}apply(mode);});if(window.matchMedia){var media=window.matchMedia('(prefers-color-scheme: dark)');var sync=function(){if((document.documentElement.getAttribute('data-theme-mode')||'auto')==='auto'){apply('auto');}};if(media.addEventListener){media.addEventListener('change',sync);}else if(media.addListener){media.addListener(sync);}}})();</script>");
+  }
+
+  String buildUiMessagePage(const char *title,
+                            const String &bodyHtml,
+                            const char *linkHref,
+                            const char *linkLabel) const {
+    String html = buildUiHead(title);
+    html += buildUiThemeControl();
+    html += F("<div class='message-wrap'><section class='hero message-card'><span class='kicker'>Greenhouse node</span><h1>");
+    html += htmlEscape(title);
+    html += F("</h1>");
+    html += bodyHtml;
+    if (linkHref != nullptr && linkLabel != nullptr) {
+      html += F("<div class='action-row'><a href='");
+      html += htmlEscape(linkHref);
+      html += F("'><button type='button' class='secondary'>");
+      html += htmlEscape(linkLabel);
+      html += F("</button></a></div>");
+    }
+    html += F("</section></div>");
+    html += buildUiThemeScript();
+    html += F("</main></body></html>");
+    return html;
   }
 
   String buildDashboardHtml() const {
     String html;
     html.reserve(18000);
-    html += F("<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>");
-    html += F("<title>Mini Greenhouse Node</title><style>");
-    html += F(":root{color-scheme:light;--bg:#ebf2e6;--panel:#ffffff;--panel-soft:#f4f8ef;--text:#1f3023;--muted:#5f705f;--line:#cad7c4;--accent:#2d6a3a;--accent-soft:#dcebd8;--ok:#337b46;--warn:#a7761e;--danger:#b44b5c;--shadow:0 18px 40px rgba(23,42,27,.12);}*{box-sizing:border-box;}body{margin:0;font-family:Georgia,'Times New Roman',serif;background:radial-gradient(circle at top,#f8fbf4 0,#edf4e8 42%,#dfe8d8 100%);color:var(--text);}body:before{content:'';position:fixed;inset:0;background:linear-gradient(135deg,rgba(78,117,72,.06),transparent 35%),linear-gradient(225deg,rgba(45,106,58,.08),transparent 40%);pointer-events:none;}main{position:relative;max-width:1080px;margin:0 auto;padding:24px 16px 48px;}section{background:rgba(255,255,255,.86);backdrop-filter:blur(6px);border:1px solid rgba(202,215,196,.92);border-radius:24px;padding:20px;margin-bottom:18px;box-shadow:var(--shadow);}h1,h2{margin:0 0 12px;}h3{margin:0 0 8px;color:#233828;}p{line-height:1.6;}a{color:var(--accent);}code{background:#edf4e7;padding:2px 6px;border-radius:6px;}.hero{background:linear-gradient(145deg,rgba(31,55,36,.96),rgba(67,108,66,.92));border:none;color:#f3f8ef;overflow:hidden;}.hero h1,.hero strong{color:#f7fbf4;}.hero p{color:#dbe8d8;}.hero-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:18px;align-items:start;}.kicker{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(240,247,233,.18);background:rgba(240,247,233,.10);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px;}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;}.card{background:var(--panel-soft);border-radius:16px;padding:14px;border:1px solid var(--line);} .hero .card{background:rgba(240,247,233,.12);border-color:rgba(240,247,233,.18);color:#f6fbf2;} .hero .card strong{display:block;font-size:1.6rem;line-height:1.15;margin-top:8px;} .hero .card span{display:block;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:#dce7d8;}label{display:block;font-weight:700;margin:10px 0 6px;}input,textarea,select{width:100%;padding:10px;border:1px solid #b9c6af;border-radius:12px;box-sizing:border-box;font:inherit;background:#fff;}textarea{min-height:88px;resize:vertical;}button{margin-top:12px;padding:10px 14px;border:none;border-radius:12px;background:linear-gradient(135deg,#2d6a3a,#3d8a4d);color:#fff;font-weight:700;cursor:pointer;}button.secondary{background:linear-gradient(135deg,#6d816d,#7f9380);} .action-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;} .action-row button{margin-top:0;} .muted{color:var(--muted);} .notice{background:linear-gradient(135deg,#eef6ea,#f8fbf5);border-left:5px solid #6b8d64;border-radius:14px;padding:12px 14px;margin:12px 0;} .status-note{min-height:1.4em;margin-top:10px;} .pill-row{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 0;} .pill{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;background:var(--accent-soft);border:1px solid rgba(45,106,58,.16);font-size:.88rem;font-weight:700;color:#21402a;} .pill.ok{background:#ddeadf;color:#245e32;border-color:rgba(51,123,70,.18);} .pill.warn{background:#f5e7cb;color:#76530f;border-color:rgba(167,118,30,.18);} .pill.danger{background:#f6dde2;color:#842738;border-color:rgba(180,75,92,.18);} .section-intro{margin-top:-4px;margin-bottom:14px;max-width:64ch;} @media (max-width:860px){.hero-grid{grid-template-columns:1fr;}} @media (max-width:640px){main{padding:16px 12px 40px;}section{padding:16px;border-radius:20px;}} </style></head><body><main>");
+    html += buildUiHead("Mini Greenhouse Node");
+    html += buildUiThemeControl();
     html += F("<section class='hero'><div class='hero-grid'><div><span class='kicker'>Greenhouse operator surface</span><h1>Mini Greenhouse Node</h1><p>Local setup, field-safe control, and live diagnostics for the ESP32-S3 greenhouse controller. This page stays node-local by design and keeps direct-solar airflow separate from controller-backed loads.</p><div class='pill-row'>");
     html += safeMode_ ? F("<span class='pill danger'>Safe mode active</span>") : F("<span class='pill ok'>Safe mode clear</span>");
     html += climateOverrideActive_ ? F("<span class='pill warn'>Dashboard climate override active</span>") : F("<span class='pill ok'>Firmware climate defaults active</span>");
@@ -1766,6 +1828,7 @@ class GreenhouseController {
       html += buildClimateSettingsScript();
       html += buildDisplaySettingsScript();
     }
+    html += buildUiThemeScript();
     html += F("</main></body></html>");
     return html;
   }
