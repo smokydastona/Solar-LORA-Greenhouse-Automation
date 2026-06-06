@@ -1,5 +1,9 @@
 # Mini Greenhouse Controller
 
+![Mini Greenhouse concept overview](./docs/diagrams/github-main-page-concept-overview.png)
+
+Concept overview for the GitHub landing page only. It shows the broader intended greenhouse system direction, including future-state elements that are documented in this repo but not yet claimed as physically installed. For the current authoritative implementation boundary, use [docs/GREENHOUSE_MASTER_PLAN.md](./docs/GREENHOUSE_MASTER_PLAN.md), [docs/WIRING_5V.md](./docs/WIRING_5V.md), and [docs/ARCHITECTURE_INDEX.md](./docs/ARCHITECTURE_INDEX.md).
+
 This repository is a real small-greenhouse automation project for an ESP32-S3 controller running from a 5 V solar plus power-bank system, with dual vent actuation, local sensing, onboard display, local logging, optional MQTT telemetry, and a documented path to a later 12 V winter backbone.
 
 It is not a generic smart-garden demo. It is designed around a real greenhouse with two installed vents, at least one already-working direct-solar fan, and a requirement for low-voltage, family-safe unattended operation.

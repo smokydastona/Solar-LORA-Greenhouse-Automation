@@ -20,6 +20,7 @@ These are the only greenhouse architecture diagrams that should be treated as cu
 | --- | --- | --- |
 | [SX1262_Pinout.png](./diagrams/SX1262_Pinout.png) | Board-level reference for the ESP32-S3 SX1262 LoRa V3 hardware | Reference only |
 | [greenhouse-controller-enclosure-reference.png](./diagrams/greenhouse-controller-enclosure-reference.png) | Example physical enclosure layout showing controller, power bank, terminal distribution, servo rail, MOSFET branches, and button placement | Reference only, not canonical wiring |
+| [github-main-page-concept-overview.png](./diagrams/github-main-page-concept-overview.png) | GitHub landing-page concept image showing the broader intended greenhouse automation system, including documented future-state subsystems | Reference only, not canonical architecture |
 
 ## Historical and non-canonical material
 
